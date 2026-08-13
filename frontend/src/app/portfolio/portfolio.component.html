@@ -1,8 +1,8 @@
 <h2>Portfolio</h2>
 <div class="error" *ngIf="errorMessage">{{ errorMessage }}</div>
 <div class="add-ticker">
-  <input [(ngModel)]="newSymbol" placeholder="e.g. AAPL, RELIANCE.NS, SHOP.TO" />
-  <button (click)="addTicker()">Add</button>
+  <input [(ngModel)]="newSymbol" placeholder="e.g. AAPL, RELIANCE.NS, SHOP.TO" [disabled]="isAdding" />
+  <button (click)="addTicker()" [disabled]="isAdding">{{ isAdding ? 'Adding…' : 'Add' }}</button>
 </div>
 <app-stock-table
   [tickers]="tickers"

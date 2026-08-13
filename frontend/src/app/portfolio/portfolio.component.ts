@@ -11,6 +11,7 @@ export class PortfolioComponent implements OnInit {
   tickers: Ticker[] = [];
   newSymbol = '';
   errorMessage: string | null = null;
+  isAdding = false;
 
   constructor(private api: StockApiService) {}
 
@@ -29,12 +30,17 @@ export class PortfolioComponent implements OnInit {
     const symbol = this.newSymbol.trim().toUpperCase();
     if (!symbol) return;
     this.errorMessage = null;
+    this.isAdding = true;
     this.api.addToPortfolio(symbol).subscribe({
       next: () => {
         this.newSymbol = '';
+        this.isAdding = false;
         this.load();
       },
-      error: err => this.errorMessage = this.describeAddError(symbol, err)
+      error: err => {
+        this.isAdding = false;
+        this.errorMessage = this.describeAddError(symbol, err);
+      }
     });
   }
 
@@ -63,6 +69,7 @@ export class PortfolioComponent implements OnInit {
   }
 
   private describeAddError(symbol: string, err: any): string {
+    if (err?.name === 'TimeoutError') return `Adding ${symbol} is taking too long (Yahoo Finance may be rate-limiting). Please wait a bit and try again.`;
     if (err?.status === 404) return `Could not find symbol ${symbol}.`;
     return `Could not add ${symbol}. Please try again.`;
   }
