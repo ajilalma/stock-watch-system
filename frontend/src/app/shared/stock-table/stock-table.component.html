@@ -28,9 +28,11 @@
     <tbody *ngFor="let group of groupedBySector()">
       <tr class="sector-header" (click)="toggleSector(group.sector)">
         <td colspan="15">
-          <span class="chevron">{{ isCollapsed(group.sector) ? '▸' : '▾' }}</span>
-          {{ group.sector }}
-          <span class="sector-count">({{ group.tickers.length }})</span>
+          <span class="sector-label">
+            <span class="chevron">{{ isCollapsed(group.sector) ? '▸' : '▾' }}</span>
+            {{ group.sector }}
+            <span class="sector-count">({{ group.tickers.length }})</span>
+          </span>
         </td>
       </tr>
       <tr *ngFor="let ticker of group.tickers" [hidden]="isCollapsed(group.sector)">

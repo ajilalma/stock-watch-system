@@ -79,6 +79,12 @@ th {
   }
 }
 
+.sector-label {
+  position: sticky;
+  left: 0;
+  display: inline-block;
+}
+
 .chevron {
   display: inline-block;
   width: 1em;
