@@ -57,4 +57,17 @@ describe('StockTableComponent', () => {
     component.onRefreshAllClick();
     expect(called).toBe(true);
   });
+
+  it('prunes selected symbols no longer present when tickers input changes', () => {
+    component.toggleRow('ZZZ', true);
+    component.toggleRow('AAA', true);
+    expect(component.selectedSymbols.size).toBe(2);
+
+    component.tickers = tickers.filter(t => t.symbol !== 'ZZZ');
+    component.ngOnChanges({ tickers: {} as any });
+
+    expect(component.selectedSymbols.has('ZZZ')).toBe(false);
+    expect(component.selectedSymbols.has('AAA')).toBe(true);
+    expect(component.selectedSymbols.size).toBe(1);
+  });
 });

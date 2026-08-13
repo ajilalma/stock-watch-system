@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
 import { Ticker } from '../models/ticker.model';
 
 interface SectorGroup {
@@ -12,13 +12,23 @@ interface SectorGroup {
   styleUrls: ['./stock-table.component.scss'],
   standalone: false
 })
-export class StockTableComponent {
+export class StockTableComponent implements OnChanges {
   @Input() tickers: Ticker[] = [];
   @Output() refreshSelected = new EventEmitter<string[]>();
   @Output() refreshAllEmitter = new EventEmitter<void>();
   @Output() remove = new EventEmitter<string>();
 
   selectedSymbols = new Set<string>();
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (!changes['tickers']) return;
+    const currentSymbols = new Set(this.tickers.map(t => t.symbol));
+    for (const symbol of Array.from(this.selectedSymbols)) {
+      if (!currentSymbols.has(symbol)) {
+        this.selectedSymbols.delete(symbol);
+      }
+    }
+  }
 
   groupedBySector(): SectorGroup[] {
     const bySector = new Map<string, Ticker[]>();
