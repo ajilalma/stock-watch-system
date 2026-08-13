@@ -45,3 +45,82 @@ body {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+
+  h2 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+  }
+}
+
+.add-ticker-form {
+  display: flex;
+  gap: 0.5rem;
+
+  input {
+    background: var(--bg-surface-raised);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    color: var(--text-primary);
+    padding: 0.45rem 0.7rem;
+    font-size: 14px;
+    min-width: 220px;
+
+    &::placeholder {
+      color: var(--text-muted);
+    }
+
+    &:focus-visible {
+      border-color: var(--accent);
+    }
+
+    &:disabled {
+      color: var(--text-muted);
+      cursor: not-allowed;
+    }
+  }
+
+  button {
+    background: var(--accent);
+    border: none;
+    border-radius: 6px;
+    color: #06120d;
+    font-weight: 600;
+    padding: 0.45rem 1rem;
+    cursor: pointer;
+
+    &:hover:not(:disabled) {
+      background: var(--accent-hover);
+    }
+
+    &:disabled {
+      background: var(--bg-surface-raised);
+      color: var(--text-muted);
+      cursor: not-allowed;
+    }
+  }
+}
+
+.error-banner {
+  background: var(--signal-red-bg);
+  border: 1px solid var(--signal-red);
+  border-radius: 6px;
+  color: var(--signal-red);
+  padding: 0.6rem 0.9rem;
+  margin-bottom: 1rem;
+  font-size: 14px;
+}
+
+.empty-state, .loading-state {
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 3rem 1rem;
+  font-size: 14px;
+}
