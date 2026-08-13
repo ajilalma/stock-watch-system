@@ -14,5 +14,10 @@ export function createApp(tickerService: TickerService): Express {
   app.use('/api/watchlist', watchlistRoutes(tickerService));
   app.use('/api/tickers', tickersRoutes(tickerService));
 
+  app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  });
+
   return app;
 }

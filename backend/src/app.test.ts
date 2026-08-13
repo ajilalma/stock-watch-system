@@ -62,3 +62,13 @@ test('POST /api/tickers/refresh-all refreshes every tracked ticker', async () =>
   expect(res.status).toBe(200);
   expect(service.refreshAll).toHaveBeenCalled();
 });
+
+test('returns 500 instead of hanging/crashing when the service rejects', async () => {
+  const service = makeFakeService();
+  service.refreshAll.mockImplementation(async () => {
+    throw new Error('boom');
+  });
+  const app = createApp(service);
+  const res = await request(app).post('/api/tickers/refresh-all');
+  expect(res.status).toBe(500);
+});
