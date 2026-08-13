@@ -1,0 +1,77 @@
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 0;
+}
+
+.sidebar-brand {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text-primary);
+  padding: 0 1.25rem 1rem;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+
+  a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding: 0.6rem 1.25rem;
+    border-left: 3px solid transparent;
+    font-size: 14px;
+
+    &:hover {
+      color: var(--text-primary);
+      background: var(--bg-surface-raised);
+    }
+
+    &.active {
+      color: var(--accent);
+      border-left-color: var(--accent);
+      background: var(--bg-surface-raised);
+    }
+  }
+}
+
+.app-content {
+  flex: 1;
+  min-width: 0;
+  padding: 1.5rem;
+}
+
+@media (max-width: 900px) {
+  .sidebar {
+    width: 64px;
+  }
+
+  .sidebar-brand {
+    font-size: 0;
+
+    &::first-letter {
+      font-size: 15px;
+    }
+  }
+
+  .sidebar-nav a {
+    font-size: 0;
+    text-align: center;
+    padding: 0.6rem 0;
+
+    &::first-letter {
+      font-size: 14px;
+    }
+  }
+}

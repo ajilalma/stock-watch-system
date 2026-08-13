@@ -1,5 +1,12 @@
-<nav>
-  <a routerLink="/portfolio" routerLinkActive="active">Portfolio</a>
-  <a routerLink="/watchlist" routerLinkActive="active">Watchlist</a>
-</nav>
-<router-outlet></router-outlet>
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="sidebar-brand">Stock Watch</div>
+    <nav class="sidebar-nav">
+      <a routerLink="/portfolio" routerLinkActive="active">Portfolio</a>
+      <a routerLink="/watchlist" routerLinkActive="active">Watchlist</a>
+    </nav>
+  </aside>
+  <main class="app-content">
+    <router-outlet></router-outlet>
+  </main>
+</div>
