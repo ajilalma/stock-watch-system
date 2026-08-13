@@ -16,10 +16,12 @@ describe('App', () => {
     expect(app).toBeTruthy();
   });
 
-  it('should render title', async () => {
+  it('should render nav links to portfolio and watchlist', async () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('h1')?.textContent).toContain('Hello, frontend');
+    const links = Array.from(compiled.querySelectorAll('nav a')).map(a => a.getAttribute('routerLink'));
+    expect(links).toContain('/portfolio');
+    expect(links).toContain('/watchlist');
   });
 });
