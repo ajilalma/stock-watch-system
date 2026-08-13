@@ -1,56 +1,60 @@
-<div class="toolbar">
-  <button [disabled]="selectedSymbols.size === 0" (click)="onRefreshSelectedClick()">
-    Refresh Selected
-  </button>
-  <button (click)="onRefreshAllClick()">Refresh All</button>
+<div class="table-toolbar">
+  <button type="button" class="text-btn" (click)="expandAll()">Expand all</button>
+  <span class="toolbar-sep">·</span>
+  <button type="button" class="text-btn" (click)="collapseAll()">Collapse all</button>
 </div>
 
-<table>
-  <thead>
-    <tr>
-      <th><input type="checkbox" (change)="toggleSelectAll($any($event.target).checked)" /></th>
-      <th>Ticker</th>
-      <th>Company</th>
-      <th>Current Price</th>
-      <th>Fair Value</th>
-      <th>P/B</th>
-      <th>P/B Industry</th>
-      <th>PEG</th>
-      <th>Current Ratio</th>
-      <th>Current Ratio Industry</th>
-      <th>Quick Ratio</th>
-      <th>Quick Ratio Industry</th>
-      <th>Last Dividend Date</th>
-      <th>Last Dividend Amount</th>
-      <th>Payout Ratio</th>
-      <th></th>
-    </tr>
-  </thead>
-  <tbody *ngFor="let group of groupedBySector()">
-    <tr class="sector-header">
-      <td colspan="16">{{ group.sector }}</td>
-    </tr>
-    <tr *ngFor="let ticker of group.tickers">
-      <td><input type="checkbox"
-                 [checked]="selectedSymbols.has(ticker.symbol)"
-                 (change)="toggleRow(ticker.symbol, $any($event.target).checked)" /></td>
-      <td>{{ ticker.symbol }}</td>
-      <td>{{ ticker.companyName }}</td>
-      <td [class]="ticker.cachedData?.currentPrice! | marginOfSafetyColor:ticker.cachedData?.fairValue">
-        {{ ticker.cachedData?.currentPrice | number:'1.2-2' }}
-      </td>
-      <td>{{ ticker.cachedData?.fairValue | number:'1.2-2' }}</td>
-      <td [class]="ticker.cachedData?.priceToBook | priceToBookColor">{{ ticker.cachedData?.priceToBook | number:'1.2-2' }}</td>
-      <td>{{ ticker.cachedData?.priceToBookIndustryAvg | number:'1.2-2' }}</td>
-      <td [class]="ticker.cachedData?.pegRatio | pegColor">{{ ticker.cachedData?.pegRatio | number:'1.2-2' }}</td>
-      <td [class]="ticker.cachedData?.currentRatio | ratioColor">{{ ticker.cachedData?.currentRatio | number:'1.2-2' }}</td>
-      <td>{{ ticker.cachedData?.currentRatioIndustryAvg | number:'1.2-2' }}</td>
-      <td [class]="ticker.cachedData?.quickRatio | ratioColor">{{ ticker.cachedData?.quickRatio | number:'1.2-2' }}</td>
-      <td>{{ ticker.cachedData?.quickRatioIndustryAvg | number:'1.2-2' }}</td>
-      <td>{{ ticker.cachedData?.lastDividendDate | date:'yyyy-MM-dd' }}</td>
-      <td>{{ ticker.cachedData?.lastDividendAmount | number:'1.2-2' }}</td>
-      <td [class]="ticker.cachedData?.payoutRatio | payoutRatioColor">{{ ticker.cachedData?.payoutRatio | percent }}</td>
-      <td><button (click)="onRemoveClick(ticker.symbol)">Remove</button></td>
-    </tr>
-  </tbody>
-</table>
+<div class="table-scroll">
+  <table>
+    <thead>
+      <tr>
+        <th class="sticky-col sticky-col-1">Ticker</th>
+        <th class="sticky-col sticky-col-2">Company</th>
+        <th>Current Price</th>
+        <th>Fair Value</th>
+        <th>P/B</th>
+        <th>P/B Industry</th>
+        <th>PEG</th>
+        <th>Current Ratio</th>
+        <th>Current Ratio Industry</th>
+        <th>Quick Ratio</th>
+        <th>Quick Ratio Industry</th>
+        <th>Last Dividend Date</th>
+        <th>Last Dividend Amount</th>
+        <th>Payout Ratio</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody *ngFor="let group of groupedBySector()">
+      <tr class="sector-header" (click)="toggleSector(group.sector)">
+        <td colspan="15">
+          <span class="chevron">{{ isCollapsed(group.sector) ? '▸' : '▾' }}</span>
+          {{ group.sector }}
+          <span class="sector-count">({{ group.tickers.length }})</span>
+        </td>
+      </tr>
+      <tr *ngFor="let ticker of group.tickers" [hidden]="isCollapsed(group.sector)">
+        <td class="sticky-col sticky-col-1">{{ ticker.symbol }}</td>
+        <td class="sticky-col sticky-col-2">{{ ticker.companyName }}</td>
+        <td [class]="ticker.cachedData?.currentPrice! | marginOfSafetyColor:ticker.cachedData?.fairValue">
+          {{ ticker.cachedData?.currentPrice | number:'1.2-2' }}
+        </td>
+        <td>{{ ticker.cachedData?.fairValue | number:'1.2-2' }}</td>
+        <td [class]="ticker.cachedData?.priceToBook | priceToBookColor">{{ ticker.cachedData?.priceToBook | number:'1.2-2' }}</td>
+        <td>{{ ticker.cachedData?.priceToBookIndustryAvg | number:'1.2-2' }}</td>
+        <td [class]="ticker.cachedData?.pegRatio | pegColor">{{ ticker.cachedData?.pegRatio | number:'1.2-2' }}</td>
+        <td [class]="ticker.cachedData?.currentRatio | ratioColor">{{ ticker.cachedData?.currentRatio | number:'1.2-2' }}</td>
+        <td>{{ ticker.cachedData?.currentRatioIndustryAvg | number:'1.2-2' }}</td>
+        <td [class]="ticker.cachedData?.quickRatio | ratioColor">{{ ticker.cachedData?.quickRatio | number:'1.2-2' }}</td>
+        <td>{{ ticker.cachedData?.quickRatioIndustryAvg | number:'1.2-2' }}</td>
+        <td>{{ ticker.cachedData?.lastDividendDate | date:'yyyy-MM-dd' }}</td>
+        <td>{{ ticker.cachedData?.lastDividendAmount | number:'1.2-2' }}</td>
+        <td [class]="ticker.cachedData?.payoutRatio | payoutRatioColor">{{ ticker.cachedData?.payoutRatio | percent }}</td>
+        <td class="row-actions">
+          <button type="button" class="icon-btn refresh-btn" title="Refresh" (click)="onRefreshClick(ticker.symbol)">↻</button>
+          <button type="button" class="icon-btn remove-btn" title="Remove" (click)="onRemoveClick(ticker.symbol)">×</button>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>

@@ -14,18 +14,17 @@ interface SectorGroup {
 })
 export class StockTableComponent implements OnChanges {
   @Input() tickers: Ticker[] = [];
-  @Output() refreshSelected = new EventEmitter<string[]>();
-  @Output() refreshAllEmitter = new EventEmitter<void>();
+  @Output() refreshOne = new EventEmitter<string>();
   @Output() remove = new EventEmitter<string>();
 
-  selectedSymbols = new Set<string>();
+  collapsedSectors = new Set<string>();
 
   ngOnChanges(changes: SimpleChanges): void {
     if (!changes['tickers']) return;
-    const currentSymbols = new Set(this.tickers.map(t => t.symbol));
-    for (const symbol of Array.from(this.selectedSymbols)) {
-      if (!currentSymbols.has(symbol)) {
-        this.selectedSymbols.delete(symbol);
+    const currentSectors = new Set(this.tickers.map(t => t.sector));
+    for (const sector of Array.from(this.collapsedSectors)) {
+      if (!currentSectors.has(sector)) {
+        this.collapsedSectors.delete(sector);
       }
     }
   }
@@ -45,23 +44,28 @@ export class StockTableComponent implements OnChanges {
       }));
   }
 
-  toggleRow(symbol: string, checked: boolean): void {
-    if (checked) this.selectedSymbols.add(symbol);
-    else this.selectedSymbols.delete(symbol);
+  isCollapsed(sector: string): boolean {
+    return this.collapsedSectors.has(sector);
   }
 
-  toggleSelectAll(checked: boolean): void {
-    this.selectedSymbols = checked
-      ? new Set(this.tickers.map(t => t.symbol))
-      : new Set();
+  toggleSector(sector: string): void {
+    if (this.collapsedSectors.has(sector)) {
+      this.collapsedSectors.delete(sector);
+    } else {
+      this.collapsedSectors.add(sector);
+    }
   }
 
-  onRefreshSelectedClick(): void {
-    this.refreshSelected.emit(Array.from(this.selectedSymbols));
+  collapseAll(): void {
+    this.collapsedSectors = new Set(this.tickers.map(t => t.sector));
   }
 
-  onRefreshAllClick(): void {
-    this.refreshAllEmitter.emit();
+  expandAll(): void {
+    this.collapsedSectors = new Set();
+  }
+
+  onRefreshClick(symbol: string): void {
+    this.refreshOne.emit(symbol);
   }
 
   onRemoveClick(symbol: string): void {

@@ -1,7 +1,139 @@
-.toolbar { margin-bottom: 0.5rem; display: flex; gap: 0.5rem; }
-table { width: 100%; border-collapse: collapse; }
-th, td { padding: 0.4rem 0.6rem; border-bottom: 1px solid #ddd; text-align: left; }
-.sector-header td { font-weight: bold; background: #f0f0f0; }
-.green { background-color: #c8f7c5; }
-.yellow { background-color: #fff3c4; }
-.red { background-color: #f7c5c5; }
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+  font-size: 13px;
+}
+
+.toolbar-sep {
+  color: var(--border-subtle);
+}
+
+.text-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0.2rem 0.3rem;
+
+  &:hover {
+    color: var(--accent);
+  }
+}
+
+.table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--bg-surface);
+  font-size: 13px;
+}
+
+th, td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+  white-space: nowrap;
+}
+
+th {
+  color: var(--text-secondary);
+  font-weight: 600;
+  background: var(--bg-surface);
+}
+
+.sticky-col {
+  position: sticky;
+  background: var(--bg-surface);
+}
+
+.sticky-col-1 {
+  left: 0;
+  min-width: 80px;
+}
+
+.sticky-col-2 {
+  left: 80px;
+  min-width: 160px;
+  border-right: 1px solid var(--border-subtle);
+}
+
+.sector-header {
+  cursor: pointer;
+
+  td {
+    font-weight: 600;
+    background: var(--bg-surface-raised);
+    color: var(--text-primary);
+  }
+
+  &:hover td {
+    background: var(--border-subtle);
+  }
+}
+
+.chevron {
+  display: inline-block;
+  width: 1em;
+  color: var(--text-secondary);
+}
+
+.sector-count {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+tbody tr:not(.sector-header):hover td {
+  background: var(--bg-surface-raised);
+}
+
+.row-actions {
+  display: flex;
+  gap: 0.3rem;
+  white-space: nowrap;
+}
+
+.icon-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+
+  &:hover {
+    background: var(--bg-surface-raised);
+  }
+}
+
+.refresh-btn:hover {
+  color: var(--accent);
+}
+
+.remove-btn:hover {
+  color: var(--signal-red);
+}
+
+.green {
+  background-color: var(--signal-green-bg);
+  color: var(--signal-green);
+}
+
+.yellow {
+  background-color: var(--signal-yellow-bg);
+  color: var(--signal-yellow);
+}
+
+.red {
+  background-color: var(--signal-red-bg);
+  color: var(--signal-red);
+}

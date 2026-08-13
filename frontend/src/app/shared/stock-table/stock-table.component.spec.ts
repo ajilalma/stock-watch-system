@@ -38,36 +38,44 @@ describe('StockTableComponent', () => {
     expect(groups[1].tickers.map(t => t.companyName)).toEqual(['Apex Inc', 'Beacon Ltd']);
   });
 
-  it('selecting all rows via toggleSelectAll checks every ticker', () => {
-    component.toggleSelectAll(true);
-    expect(component.selectedSymbols.size).toBe(3);
+  it('sectors are expanded by default', () => {
+    expect(component.isCollapsed('Energy')).toBe(false);
+    expect(component.isCollapsed('Technology')).toBe(false);
   });
 
-  it('refreshSelected emits only the checked symbols', () => {
-    const emitted: string[][] = [];
-    component.refreshSelected.subscribe((symbols: string[]) => emitted.push(symbols));
-    component.toggleRow('AAA', true);
-    component.onRefreshSelectedClick();
-    expect(emitted).toEqual([['AAA']]);
+  it('toggleSector collapses and re-expands a single sector', () => {
+    component.toggleSector('Technology');
+    expect(component.isCollapsed('Technology')).toBe(true);
+    expect(component.isCollapsed('Energy')).toBe(false);
+
+    component.toggleSector('Technology');
+    expect(component.isCollapsed('Technology')).toBe(false);
   });
 
-  it('onRefreshAllClick emits refreshAll', () => {
-    let called = false;
-    component.refreshAllEmitter.subscribe(() => { called = true; });
-    component.onRefreshAllClick();
-    expect(called).toBe(true);
+  it('collapseAll collapses every sector present in the current tickers', () => {
+    component.collapseAll();
+    expect(component.isCollapsed('Energy')).toBe(true);
+    expect(component.isCollapsed('Technology')).toBe(true);
   });
 
-  it('prunes selected symbols no longer present when tickers input changes', () => {
-    component.toggleRow('ZZZ', true);
-    component.toggleRow('AAA', true);
-    expect(component.selectedSymbols.size).toBe(2);
+  it('expandAll clears all collapsed sectors', () => {
+    component.collapseAll();
+    component.expandAll();
+    expect(component.isCollapsed('Energy')).toBe(false);
+    expect(component.isCollapsed('Technology')).toBe(false);
+  });
 
-    component.tickers = tickers.filter(t => t.symbol !== 'ZZZ');
-    component.ngOnChanges({ tickers: {} as any });
+  it('onRefreshClick emits the given symbol on refreshOne', () => {
+    const emitted: string[] = [];
+    component.refreshOne.subscribe((symbol: string) => emitted.push(symbol));
+    component.onRefreshClick('AAA');
+    expect(emitted).toEqual(['AAA']);
+  });
 
-    expect(component.selectedSymbols.has('ZZZ')).toBe(false);
-    expect(component.selectedSymbols.has('AAA')).toBe(true);
-    expect(component.selectedSymbols.size).toBe(1);
+  it('onRemoveClick emits the given symbol on remove', () => {
+    const emitted: string[] = [];
+    component.remove.subscribe((symbol: string) => emitted.push(symbol));
+    component.onRemoveClick('AAA');
+    expect(emitted).toEqual(['AAA']);
   });
 });
