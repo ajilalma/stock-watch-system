@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { StockApiService } from '../shared/services/stock-api.service';
 import { Ticker } from '../shared/models/ticker.model';
 
@@ -13,7 +13,7 @@ export class WatchlistComponent implements OnInit {
   errorMessage: string | null = null;
   isAdding = false;
 
-  constructor(private api: StockApiService) {}
+  constructor(private api: StockApiService, private cdr: ChangeDetectorRef) {}
 
   ngOnInit(): void {
     this.load();
@@ -21,8 +21,14 @@ export class WatchlistComponent implements OnInit {
 
   private load(): void {
     this.api.getWatchlist().subscribe({
-      next: tickers => this.tickers = tickers,
-      error: () => this.errorMessage = 'Could not load your watchlist. Please try again.'
+      next: tickers => {
+        this.tickers = tickers;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.errorMessage = 'Could not load your watchlist. Please try again.';
+        this.cdr.detectChanges();
+      }
     });
   }
 
@@ -40,6 +46,7 @@ export class WatchlistComponent implements OnInit {
       error: err => {
         this.isAdding = false;
         this.errorMessage = this.describeAddError(symbol, err);
+        this.cdr.detectChanges();
       }
     });
   }
@@ -48,7 +55,10 @@ export class WatchlistComponent implements OnInit {
     this.errorMessage = null;
     this.api.removeFromWatchlist(symbol).subscribe({
       next: () => this.load(),
-      error: () => this.errorMessage = `Could not remove ${symbol}. Please try again.`
+      error: () => {
+        this.errorMessage = `Could not remove ${symbol}. Please try again.`;
+        this.cdr.detectChanges();
+      }
     });
   }
 
@@ -56,7 +66,10 @@ export class WatchlistComponent implements OnInit {
     this.errorMessage = null;
     this.api.refreshMany(symbols).subscribe({
       next: () => this.load(),
-      error: () => this.errorMessage = 'Could not refresh the selected tickers. Please try again.'
+      error: () => {
+        this.errorMessage = 'Could not refresh the selected tickers. Please try again.';
+        this.cdr.detectChanges();
+      }
     });
   }
 
@@ -64,7 +77,10 @@ export class WatchlistComponent implements OnInit {
     this.errorMessage = null;
     this.api.refreshAll().subscribe({
       next: () => this.load(),
-      error: () => this.errorMessage = 'Could not refresh tickers. Please try again.'
+      error: () => {
+        this.errorMessage = 'Could not refresh tickers. Please try again.';
+        this.cdr.detectChanges();
+      }
     });
   }
 
