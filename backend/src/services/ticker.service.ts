@@ -16,7 +16,7 @@ export class TickerService {
   ) {}
 
   private async fetchCachedData(symbol: string): Promise<{
-    companyName: string; sector: string; exchange: string; country: string; nativeCurrency: string;
+    symbol: string; companyName: string; sector: string; exchange: string; country: string; nativeCurrency: string;
     cachedData: CachedData;
   }> {
     const quote = await this.provider.getQuote(symbol);
@@ -45,6 +45,7 @@ export class TickerService {
     };
 
     return {
+      symbol: quote.symbol,
       companyName: quote.companyName,
       sector: quote.sector,
       exchange: quote.exchange,
@@ -55,7 +56,8 @@ export class TickerService {
   }
 
   async addTicker(symbol: string, list: 'portfolio' | 'watchlist'): Promise<TickerDocument> {
-    const existing = await TickerModel.findOne({ symbol });
+    const normalizedSymbol = symbol.trim().toUpperCase();
+    const existing = await TickerModel.findOne({ symbol: normalizedSymbol });
     if (existing) {
       if (!existing.lists.includes(list)) {
         existing.lists.push(list);
@@ -64,11 +66,11 @@ export class TickerService {
       return existing;
     }
 
-    const { companyName, sector, exchange, country, nativeCurrency, cachedData } =
-      await this.fetchCachedData(symbol);
+    const { companyName, sector, exchange, country, nativeCurrency, cachedData, symbol: canonicalSymbol } =
+      await this.fetchCachedData(normalizedSymbol);
 
     return TickerModel.create({
-      symbol, companyName, sector, exchange, country, nativeCurrency,
+      symbol: canonicalSymbol, companyName, sector, exchange, country, nativeCurrency,
       lists: [list], cachedData
     });
   }

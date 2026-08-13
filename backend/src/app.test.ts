@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { createApp } from './app';
 import { TickerService } from './services/ticker.service';
+import { SymbolNotFoundError } from './errors/symbol-not-found.error';
 
 function makeFakeService(): jest.Mocked<TickerService> {
   return {
@@ -71,4 +72,16 @@ test('returns 500 instead of hanging/crashing when the service rejects', async (
   const app = createApp(service);
   const res = await request(app).post('/api/tickers/refresh-all');
   expect(res.status).toBe(500);
+  expect(res.body).toEqual({ error: 'Internal server error' });
+});
+
+test('returns a distinct 4xx (not a bare 500) when addTicker rejects with SymbolNotFoundError', async () => {
+  const service = makeFakeService();
+  service.addTicker.mockImplementation(async () => {
+    throw new SymbolNotFoundError('ZZZZINVALID123');
+  });
+  const app = createApp(service);
+  const res = await request(app).post('/api/portfolio/ZZZZINVALID123');
+  expect(res.status).toBe(404);
+  expect(res.body.error).toMatch(/ZZZZINVALID123/);
 });
