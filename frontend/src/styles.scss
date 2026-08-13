@@ -1,1 +1,47 @@
-/* You can add global styles to this file, and also import other style files */
+:root {
+  // Base palette
+  --bg-base: #0a0a0a;
+  --bg-surface: #141414;
+  --bg-surface-raised: #1c1c1c;
+  --border-subtle: #2a2a2a;
+  --text-primary: #e8e8e8;
+  --text-secondary: #9a9a9a;
+  --text-muted: #666666;
+
+  // Accent (interactive elements)
+  --accent: #3ecf8e;
+  --accent-hover: #34b87c;
+
+  // Semantic signal colors (deliberately distinct hue from --accent)
+  --signal-green: #4caf7d;
+  --signal-green-bg: rgba(76, 175, 125, 0.15);
+  --signal-yellow: #d4b13f;
+  --signal-yellow-bg: rgba(212, 177, 63, 0.15);
+  --signal-red: #d4574f;
+  --signal-red-bg: rgba(212, 87, 79, 0.15);
+
+  // Typography
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
