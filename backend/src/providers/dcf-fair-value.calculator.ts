@@ -11,7 +11,16 @@ export class DcfFairValueCalculator implements FairValueCalculator {
 
     const yearlyGrowthRates: number[] = [];
     for (let i = 1; i < history.length; i++) {
+      // Skip any comparison where the prior year's FCF was zero or negative:
+      // dividing by a non-positive base inverts the sign or produces
+      // Infinity/NaN, which would otherwise corrupt the whole calculation.
+      if (history[i - 1] <= 0) continue;
       yearlyGrowthRates.push((history[i] - history[i - 1]) / history[i - 1]);
+    }
+    if (yearlyGrowthRates.length === 0) {
+      throw new Error(
+        'At least one valid year-over-year comparison with a positive prior-year free cash flow is required for a DCF calculation'
+      );
     }
     const avgGrowthRate = yearlyGrowthRates.reduce((sum, r) => sum + r, 0) / yearlyGrowthRates.length;
     const growthRate = Math.min(avgGrowthRate, DCF_CONFIG.maxGrowthRateCap);

@@ -14,4 +14,10 @@ describe('MarginOfSafetyColorPipe', () => {
   it('none when either value is undefined', () => {
     expect(pipe.transform(undefined, 100)).toBe('none');
   });
+  it('none when fairValue is zero', () => {
+    expect(pipe.transform(80, 0)).toBe('none');
+  });
+  it('none when fairValue is negative (e.g. a cash-flow-negative DCF result), not green', () => {
+    expect(pipe.transform(80, -50)).toBe('none');
+  });
 });
