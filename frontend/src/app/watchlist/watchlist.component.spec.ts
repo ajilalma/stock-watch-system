@@ -18,8 +18,6 @@ describe('WatchlistComponent', () => {
     addToWatchlist: ReturnType<typeof vi.fn>;
     removeFromWatchlist: ReturnType<typeof vi.fn>;
     refreshOne: ReturnType<typeof vi.fn>;
-    refreshMany: ReturnType<typeof vi.fn>;
-    refreshAll: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -28,8 +26,6 @@ describe('WatchlistComponent', () => {
       addToWatchlist: vi.fn(),
       removeFromWatchlist: vi.fn(),
       refreshOne: vi.fn(),
-      refreshMany: vi.fn(),
-      refreshAll: vi.fn(),
     };
     apiSpy.getWatchlist.mockReturnValue(of(sampleTickers));
 
@@ -48,6 +44,10 @@ describe('WatchlistComponent', () => {
     expect(component.tickers).toEqual(sampleTickers);
   });
 
+  it('isLoading is false once the initial load resolves', () => {
+    expect(component.isLoading).toBe(false);
+  });
+
   it('addTicker calls addToWatchlist and reloads the list', () => {
     apiSpy.addToWatchlist.mockReturnValue(of(sampleTickers[0]));
     component.newSymbol = 'SHOP.TO';
@@ -63,11 +63,17 @@ describe('WatchlistComponent', () => {
     expect(apiSpy.getWatchlist).toHaveBeenCalledTimes(2);
   });
 
-  it('onRefreshAll calls refreshAll and reloads the list', () => {
-    apiSpy.refreshAll.mockReturnValue(of(sampleTickers));
-    component.onRefreshAll();
-    expect(apiSpy.refreshAll).toHaveBeenCalled();
+  it('onRefreshOne calls refreshOne with the given symbol and reloads the list', () => {
+    apiSpy.refreshOne.mockReturnValue(of(sampleTickers[0]));
+    component.onRefreshOne('RELIANCE.NS');
+    expect(apiSpy.refreshOne).toHaveBeenCalledWith('RELIANCE.NS');
     expect(apiSpy.getWatchlist).toHaveBeenCalledTimes(2);
+  });
+
+  it('onRefreshOne sets errorMessage when the refresh call fails', () => {
+    apiSpy.refreshOne.mockReturnValue(throwError(() => new Error('rate limited')));
+    component.onRefreshOne('RELIANCE.NS');
+    expect(component.errorMessage).toContain('RELIANCE.NS');
   });
 
   it('addTicker trims whitespace and uppercases the symbol before calling the API', () => {

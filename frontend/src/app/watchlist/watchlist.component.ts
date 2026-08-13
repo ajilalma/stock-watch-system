@@ -12,6 +12,7 @@ export class WatchlistComponent implements OnInit {
   newSymbol = '';
   errorMessage: string | null = null;
   isAdding = false;
+  isLoading = false;
 
   constructor(private api: StockApiService, private cdr: ChangeDetectorRef) {}
 
@@ -20,13 +21,16 @@ export class WatchlistComponent implements OnInit {
   }
 
   private load(): void {
+    this.isLoading = true;
     this.api.getWatchlist().subscribe({
       next: tickers => {
         this.tickers = tickers;
+        this.isLoading = false;
         this.cdr.detectChanges();
       },
       error: () => {
         this.errorMessage = 'Could not load your watchlist. Please try again.';
+        this.isLoading = false;
         this.cdr.detectChanges();
       }
     });
@@ -62,23 +66,12 @@ export class WatchlistComponent implements OnInit {
     });
   }
 
-  onRefreshSelected(symbols: string[]): void {
+  onRefreshOne(symbol: string): void {
     this.errorMessage = null;
-    this.api.refreshMany(symbols).subscribe({
+    this.api.refreshOne(symbol).subscribe({
       next: () => this.load(),
       error: () => {
-        this.errorMessage = 'Could not refresh the selected tickers. Please try again.';
-        this.cdr.detectChanges();
-      }
-    });
-  }
-
-  onRefreshAll(): void {
-    this.errorMessage = null;
-    this.api.refreshAll().subscribe({
-      next: () => this.load(),
-      error: () => {
-        this.errorMessage = 'Could not refresh tickers. Please try again.';
+        this.errorMessage = `Could not refresh ${symbol}. Please try again.`;
         this.cdr.detectChanges();
       }
     });
