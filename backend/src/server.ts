@@ -5,6 +5,7 @@ import { TickerService } from './services/ticker.service';
 import { YahooFinanceProvider } from './providers/yahoo-finance.provider';
 import { DcfFairValueCalculator } from './providers/dcf-fair-value.calculator';
 import { FrankfurterConverter } from './providers/frankfurter.converter';
+import { CachedCurrencyConverter } from './providers/cached-currency.converter';
 
 async function main() {
   await connectMongo();
@@ -12,7 +13,7 @@ async function main() {
   const tickerService = new TickerService(
     new YahooFinanceProvider(),
     new DcfFairValueCalculator(),
-    new FrankfurterConverter()
+    new CachedCurrencyConverter(new FrankfurterConverter())
   );
   const app = createApp(tickerService);
 
