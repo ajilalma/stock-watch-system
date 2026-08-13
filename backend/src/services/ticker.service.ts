@@ -3,8 +3,10 @@ import { FairValueCalculator } from '../providers/fair-value-calculator.interfac
 import { CurrencyConverter } from '../providers/currency-converter.interface';
 import { RatioService } from './ratio.service';
 import { TickerModel, TickerDocument, CachedData } from '../models/ticker.model';
+import { TickerHistoryModel } from '../models/ticker-history.model';
 
 const DISPLAY_CURRENCY = 'USD';
+const FIFTEEN_DAYS_MS = 15 * 24 * 60 * 60 * 1000;
 
 export class TickerService {
   constructor(
@@ -84,6 +86,47 @@ export class TickerService {
   }
 
   async getList(list: 'portfolio' | 'watchlist'): Promise<TickerDocument[]> {
-    return TickerModel.find({ lists: list }).sort({ sector: 1, companyName: 1 });
+    const tickers = await TickerModel.find({ lists: list }).sort({ sector: 1, companyName: 1 });
+    return Promise.all(tickers.map(t => this.ensureFresh(t)));
+  }
+
+  async refreshTicker(symbol: string): Promise<TickerDocument> {
+    const ticker = await TickerModel.findOne({ symbol });
+    if (!ticker) {
+      throw new Error(`Ticker ${symbol} not found`);
+    }
+
+    if (ticker.cachedData) {
+      await TickerHistoryModel.create({
+        symbol,
+        archivedAt: ticker.cachedData.fetchedAt,
+        data: ticker.cachedData
+      });
+    }
+
+    const { cachedData } = await this.fetchCachedData(symbol);
+    ticker.cachedData = cachedData;
+    await ticker.save();
+    return ticker;
+  }
+
+  async refreshTickers(symbols: string[]): Promise<TickerDocument[]> {
+    const results: TickerDocument[] = [];
+    for (const symbol of symbols) {
+      results.push(await this.refreshTicker(symbol));
+    }
+    return results;
+  }
+
+  async refreshAll(): Promise<TickerDocument[]> {
+    const all = await TickerModel.find({});
+    return this.refreshTickers(all.map(t => t.symbol));
+  }
+
+  async ensureFresh(ticker: TickerDocument): Promise<TickerDocument> {
+    const fetchedAt = ticker.cachedData?.fetchedAt;
+    const isStale = !fetchedAt || (Date.now() - fetchedAt.getTime()) > FIFTEEN_DAYS_MS;
+    if (!isStale) return ticker;
+    return this.refreshTicker(ticker.symbol);
   }
 }

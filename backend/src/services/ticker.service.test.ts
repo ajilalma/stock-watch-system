@@ -5,6 +5,7 @@ import { TickerModel } from '../models/ticker.model';
 import { StockDataProvider } from '../providers/stock-data-provider.interface';
 import { FairValueCalculator } from '../providers/fair-value-calculator.interface';
 import { CurrencyConverter } from '../providers/currency-converter.interface';
+import { TickerHistoryModel } from '../models/ticker-history.model';
 
 let mongod: MongoMemoryServer;
 
@@ -101,4 +102,58 @@ test('getList returns tickers for the given list, sorted by sector then company 
 
   const list = await service.getList('portfolio');
   expect(list.map(t => t.symbol)).toEqual(['ZZZ', 'AAA']); // Energy before Technology
+});
+
+afterEach(async () => {
+  await TickerHistoryModel.deleteMany({});
+});
+
+test('refreshTicker archives the previous cachedData into tickerHistory before overwriting', async () => {
+  const service = new TickerService(fakeProvider, fakeCalculator, fakeConverter);
+  const original = await service.addTicker('AAPL', 'portfolio');
+  const originalFetchedAt = original.cachedData!.fetchedAt;
+
+  await service.refreshTicker('AAPL');
+
+  const historyEntries = await TickerHistoryModel.find({ symbol: 'AAPL' });
+  expect(historyEntries).toHaveLength(1);
+  expect(historyEntries[0].data.currentPrice).toBe(original.cachedData!.currentPrice);
+  expect(historyEntries[0].archivedAt.getTime()).toBe(originalFetchedAt.getTime());
+});
+
+test('refreshTicker updates cachedData.fetchedAt to a newer timestamp', async () => {
+  const service = new TickerService(fakeProvider, fakeCalculator, fakeConverter);
+  const original = await service.addTicker('AAPL', 'portfolio');
+  const originalFetchedAt = original.cachedData!.fetchedAt;
+
+  await new Promise(resolve => setTimeout(resolve, 5));
+  const refreshed = await service.refreshTicker('AAPL');
+
+  expect(refreshed.cachedData!.fetchedAt.getTime()).toBeGreaterThan(originalFetchedAt.getTime());
+});
+
+test('ensureFresh refreshes a ticker whose cachedData is older than 15 days', async () => {
+  const service = new TickerService(fakeProvider, fakeCalculator, fakeConverter);
+  const ticker = await service.addTicker('AAPL', 'portfolio');
+  const staleDate = new Date(Date.now() - 16 * 24 * 60 * 60 * 1000);
+  ticker.cachedData!.fetchedAt = staleDate;
+  await ticker.save();
+
+  const result = await service.ensureFresh(ticker);
+  expect(result.cachedData!.fetchedAt.getTime()).toBeGreaterThan(staleDate.getTime());
+
+  const historyEntries = await TickerHistoryModel.find({ symbol: 'AAPL' });
+  expect(historyEntries).toHaveLength(1);
+});
+
+test('ensureFresh does not refresh a ticker whose cachedData is within 15 days', async () => {
+  const service = new TickerService(fakeProvider, fakeCalculator, fakeConverter);
+  const ticker = await service.addTicker('AAPL', 'portfolio');
+  const freshFetchedAt = ticker.cachedData!.fetchedAt;
+
+  const result = await service.ensureFresh(ticker);
+  expect(result.cachedData!.fetchedAt.getTime()).toBe(freshFetchedAt.getTime());
+
+  const historyEntries = await TickerHistoryModel.find({ symbol: 'AAPL' });
+  expect(historyEntries).toHaveLength(0);
 });
