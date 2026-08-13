@@ -27,6 +27,9 @@ import YahooFinance from 'yahoo-finance2-v4';
 import { StockDataProvider } from './stock-data-provider.interface';
 import { RawQuote, RawFinancials } from '../types/domain';
 import { SymbolNotFoundError } from '../errors/symbol-not-found.error';
+import { logger } from '../logger';
+
+const SCOPE = 'YahooFinanceProvider(v4)';
 
 // See yahoo-finance.provider.ts for how these values were originally
 // derived (empirically, against v2's `fullExchangeName`). v4's `price`
@@ -63,10 +66,18 @@ export class YahooFinanceV4Provider implements StockDataProvider {
 
   private fetchQuoteSummary(symbol: string): Promise<any> {
     const cached = this.pendingSummaries.get(symbol);
-    if (cached) return cached;
+    if (cached) {
+      logger.info(SCOPE, `fetchQuoteSummary(${symbol}) - reusing in-flight/recent call`, { symbol });
+      return cached;
+    }
 
+    logger.info(SCOPE, `fetchQuoteSummary(${symbol}) - calling Yahoo quoteSummary`, { symbol, modules: QUOTE_SUMMARY_MODULES });
     const promise = this.client.quoteSummary(symbol, { modules: QUOTE_SUMMARY_MODULES } as any);
     this.pendingSummaries.set(symbol, promise);
+    promise.then(
+      () => logger.info(SCOPE, `fetchQuoteSummary(${symbol}) - Yahoo call succeeded`, { symbol }),
+      (err: unknown) => logger.error(SCOPE, `fetchQuoteSummary(${symbol}) - Yahoo call failed`, { symbol, error: err instanceof Error ? err.message : String(err) })
+    );
     setTimeout(() => {
       if (this.pendingSummaries.get(symbol) === promise) {
         this.pendingSummaries.delete(symbol);
@@ -80,7 +91,10 @@ export class YahooFinanceV4Provider implements StockDataProvider {
     try {
       return await this.fetchQuoteSummary(symbol);
     } catch (err) {
-      if (isNotFoundError(err)) throw new SymbolNotFoundError(symbol);
+      if (isNotFoundError(err)) {
+        logger.warn(SCOPE, `getSummary(${symbol}) - Yahoo reports symbol not found`, { symbol });
+        throw new SymbolNotFoundError(symbol);
+      }
       throw err;
     }
   }
@@ -88,10 +102,13 @@ export class YahooFinanceV4Provider implements StockDataProvider {
   async getQuote(symbol: string): Promise<RawQuote> {
     const summary = await this.getSummary(symbol);
     const price = summary.price;
-    if (!price) throw new SymbolNotFoundError(symbol);
+    if (!price) {
+      logger.warn(SCOPE, `getQuote(${symbol}) - no price module in response`, { symbol });
+      throw new SymbolNotFoundError(symbol);
+    }
 
     const exchange = price.exchangeName ?? price.exchange ?? 'Unknown';
-    return {
+    const result: RawQuote = {
       symbol: price.symbol ?? symbol,
       companyName: price.longName ?? price.shortName ?? price.symbol ?? symbol,
       sector: summary.summaryProfile?.sector ?? 'Unknown',
@@ -100,11 +117,15 @@ export class YahooFinanceV4Provider implements StockDataProvider {
       currency: price.currency,
       currentPrice: price.regularMarketPrice
     };
+    logger.info(SCOPE, `getQuote(${symbol}) - resolved`, result as unknown as Record<string, unknown>);
+    return result;
   }
 
   async getFinancials(symbol: string): Promise<RawFinancials> {
     const summary = await this.getSummary(symbol);
+    logger.info(SCOPE, `getFinancials(${symbol}) - calling fundamentalsTimeSeries for cash flow`, { symbol });
     const freeCashFlowHistory = await this.fetchFreeCashFlowHistory(symbol);
+    logger.info(SCOPE, `getFinancials(${symbol}) - resolved`, { symbol, freeCashFlowYears: freeCashFlowHistory.length, sharesOutstanding: summary.defaultKeyStatistics?.sharesOutstanding });
 
     return {
       symbol,

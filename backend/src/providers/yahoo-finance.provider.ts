@@ -3,6 +3,9 @@ import yahooFinance from 'yahoo-finance2';
 import { StockDataProvider } from './stock-data-provider.interface';
 import { RawQuote, RawFinancials } from '../types/domain';
 import { SymbolNotFoundError } from '../errors/symbol-not-found.error';
+import { logger } from '../logger';
+
+const SCOPE = 'YahooFinanceProvider(v2)';
 
 // Keyed on `fullExchangeName` (NOT `exchange`, which is Yahoo's short internal
 // code, e.g. NMS/NYQ/TOR/NSI/GER — verified empirically against the live API,
@@ -54,10 +57,18 @@ export class YahooFinanceProvider implements StockDataProvider {
   // the original quote()/EXCHANGE_COUNTRY_MAP mapping were verified.
   private fetchQuoteSummary(symbol: string): Promise<any> {
     const cached = this.pendingSummaries.get(symbol);
-    if (cached) return cached;
+    if (cached) {
+      logger.info(SCOPE, `fetchQuoteSummary(${symbol}) - reusing in-flight/recent call`, { symbol });
+      return cached;
+    }
 
+    logger.info(SCOPE, `fetchQuoteSummary(${symbol}) - calling Yahoo quoteSummary`, { symbol, modules: ALL_MODULES });
     const promise = (yahooFinance.quoteSummary as any)(symbol, { modules: ALL_MODULES });
     this.pendingSummaries.set(symbol, promise);
+    promise.then(
+      () => logger.info(SCOPE, `fetchQuoteSummary(${symbol}) - Yahoo call succeeded`, { symbol }),
+      (err: unknown) => logger.error(SCOPE, `fetchQuoteSummary(${symbol}) - Yahoo call failed`, { symbol, error: err instanceof Error ? err.message : String(err) })
+    );
     setTimeout(() => {
       if (this.pendingSummaries.get(symbol) === promise) {
         this.pendingSummaries.delete(symbol);
@@ -71,7 +82,10 @@ export class YahooFinanceProvider implements StockDataProvider {
     try {
       return await this.fetchQuoteSummary(symbol);
     } catch (err) {
-      if (isNotFoundError(err)) throw new SymbolNotFoundError(symbol);
+      if (isNotFoundError(err)) {
+        logger.warn(SCOPE, `getSummary(${symbol}) - Yahoo reports symbol not found`, { symbol });
+        throw new SymbolNotFoundError(symbol);
+      }
       throw err;
     }
   }
@@ -82,10 +96,13 @@ export class YahooFinanceProvider implements StockDataProvider {
     // An unknown symbol can come back as a 200 with an empty/missing `price`
     // module rather than a thrown error (this was quote()'s behavior before
     // the single-call merge; carrying the same guard forward defensively).
-    if (!price) throw new SymbolNotFoundError(symbol);
+    if (!price) {
+      logger.warn(SCOPE, `getQuote(${symbol}) - no price module in response`, { symbol });
+      throw new SymbolNotFoundError(symbol);
+    }
 
     const exchange = price.exchangeName ?? price.fullExchangeName ?? price.exchange ?? 'Unknown';
-    return {
+    const result: RawQuote = {
       symbol: price.symbol ?? symbol,
       companyName: price.longName ?? price.shortName ?? price.symbol ?? symbol,
       sector: summary.summaryProfile?.sector ?? 'Unknown',
@@ -94,6 +111,8 @@ export class YahooFinanceProvider implements StockDataProvider {
       currency: price.currency,
       currentPrice: price.regularMarketPrice
     };
+    logger.info(SCOPE, `getQuote(${symbol}) - resolved`, result as unknown as Record<string, unknown>);
+    return result;
   }
 
   async getFinancials(symbol: string): Promise<RawFinancials> {
@@ -109,6 +128,8 @@ export class YahooFinanceProvider implements StockDataProvider {
       .reverse()
       .map((s: any) => s.freeCashFlow)
       .filter((v: number | undefined) => typeof v === 'number');
+
+    logger.info(SCOPE, `getFinancials(${symbol}) - resolved`, { symbol, freeCashFlowYears: freeCashFlowHistory.length, sharesOutstanding: summary.defaultKeyStatistics?.sharesOutstanding });
 
     return {
       symbol,

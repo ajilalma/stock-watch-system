@@ -1,11 +1,16 @@
 import { FairValueCalculator } from './fair-value-calculator.interface';
 import { RawFinancials, FairValueResult } from '../types/domain';
 import { DCF_CONFIG } from '../config/dcf-config';
+import { logger } from '../logger';
+
+const SCOPE = 'DcfFairValueCalculator';
 
 export class DcfFairValueCalculator implements FairValueCalculator {
   async calculate(financials: RawFinancials): Promise<FairValueResult> {
     const history = financials.freeCashFlowHistory;
+    logger.info(SCOPE, `calculate(${financials.symbol}) - starting`, { symbol: financials.symbol, fcfHistory: history });
     if (history.length < 2) {
+      logger.error(SCOPE, `calculate(${financials.symbol}) - insufficient FCF history`, { symbol: financials.symbol, years: history.length });
       throw new Error('At least 2 years of free cash flow history are required for a DCF calculation');
     }
 
@@ -41,6 +46,8 @@ export class DcfFairValueCalculator implements FairValueCalculator {
 
     const totalEquityValue = presentValueSum + presentTerminalValue;
     const fairValue = totalEquityValue / financials.sharesOutstanding;
+
+    logger.info(SCOPE, `calculate(${financials.symbol}) - done`, { symbol: financials.symbol, fairValue, growthRate, sharesOutstanding: financials.sharesOutstanding });
 
     return {
       fairValue,
