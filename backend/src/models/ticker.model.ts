@@ -17,6 +17,11 @@ export interface CachedData {
   lastDividendDate?: Date;
   lastDividendAmount?: number;
   payoutRatio?: number;
+  // Set when the DCF calculation fails (e.g. insufficient/all-negative free
+  // cash flow history) - fairValue/nativeFairValue fall back to 0 in that
+  // case rather than failing the whole add/refresh. Cleared on the next
+  // successful calculation.
+  fairValueError?: string;
 }
 
 export interface TickerDocument extends Document {
@@ -46,7 +51,8 @@ const cachedDataSchema = new Schema<CachedData>({
   quickRatioIndustryAvg: Number,
   lastDividendDate: Date,
   lastDividendAmount: Number,
-  payoutRatio: Number
+  payoutRatio: Number,
+  fairValueError: String
 }, { _id: false });
 
 const tickerSchema = new Schema<TickerDocument>({

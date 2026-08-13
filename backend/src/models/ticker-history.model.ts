@@ -23,7 +23,8 @@ const historyDataSchema = new Schema<CachedData>({
   quickRatioIndustryAvg: Number,
   lastDividendDate: Date,
   lastDividendAmount: Number,
-  payoutRatio: Number
+  payoutRatio: Number,
+  fairValueError: String
 }, { _id: false });
 
 const tickerHistorySchema = new Schema<TickerHistoryDocument>({

@@ -15,6 +15,9 @@ export interface CachedData {
   lastDividendDate?: string;
   lastDividendAmount?: number;
   payoutRatio?: number;
+  // Set when the backend's DCF calculation failed and fairValue/
+  // nativeFairValue fell back to 0 - check the DB/backend logs for details.
+  fairValueError?: string;
 }
 
 export interface Ticker {

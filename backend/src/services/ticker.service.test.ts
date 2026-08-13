@@ -39,6 +39,12 @@ const fakeConverter: CurrencyConverter = {
   getRate: async () => 1
 };
 
+const failingCalculator: FairValueCalculator = {
+  calculate: async () => {
+    throw new Error('At least one valid year-over-year comparison with a positive prior-year free cash flow is required for a DCF calculation');
+  }
+};
+
 beforeAll(async () => {
   mongod = await MongoMemoryServer.create();
   await mongoose.connect(mongod.getUri());
@@ -114,6 +120,32 @@ test('removeTicker deletes the doc entirely when its last list is removed', asyn
 
   const remaining = await TickerModel.findOne({ symbol: 'AAPL' });
   expect(remaining).toBeNull();
+});
+
+test('addTicker falls back to fairValue=0 and records fairValueError when the DCF calculation fails', async () => {
+  const service = new TickerService(fakeProvider, failingCalculator, fakeConverter);
+  const ticker = await service.addTicker('AAPL', 'portfolio');
+
+  expect(ticker.cachedData?.fairValue).toBe(0);
+  expect(ticker.cachedData?.nativeFairValue).toBe(0);
+  expect(ticker.cachedData?.fairValueError).toBe(
+    'At least one valid year-over-year comparison with a positive prior-year free cash flow is required for a DCF calculation'
+  );
+  // Everything else should still populate normally - only fairValue is affected.
+  expect(ticker.cachedData?.currentPrice).toBe(100);
+  expect(ticker.cachedData?.currentRatio).toBe(2);
+});
+
+test('a later successful refresh clears a previously-recorded fairValueError', async () => {
+  const service = new TickerService(fakeProvider, failingCalculator, fakeConverter);
+  const ticker = await service.addTicker('AAPL', 'portfolio');
+  expect(ticker.cachedData?.fairValueError).toBeDefined();
+
+  const recoveredService = new TickerService(fakeProvider, fakeCalculator, fakeConverter);
+  const refreshed = await recoveredService.refreshTicker('AAPL');
+
+  expect(refreshed.cachedData?.fairValueError).toBeUndefined();
+  expect(refreshed.cachedData?.fairValue).toBe(120);
 });
 
 test('getList returns tickers for the given list, sorted by sector then company name', async () => {
