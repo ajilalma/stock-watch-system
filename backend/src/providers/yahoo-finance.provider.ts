@@ -3,20 +3,26 @@ import yahooFinance from 'yahoo-finance2';
 import { StockDataProvider } from './stock-data-provider.interface';
 import { RawQuote, RawFinancials } from '../types/domain';
 
+// Keyed on `fullExchangeName` (NOT `exchange`, which is Yahoo's short internal
+// code, e.g. NMS/NYQ/TOR/NSI/GER — verified empirically against the live API,
+// see task-6-report.md "Fix round 1"). fullExchangeName values observed:
+// AAPL -> "NasdaqGS", IBM -> "NYSE", SHOP.TO -> "Toronto",
+// RELIANCE.NS -> "NSE", SAP.DE -> "XETRA", HSBA.L -> "LSE".
 const EXCHANGE_COUNTRY_MAP: Record<string, string> = {
-  NASDAQ: 'US', NYSE: 'US', TSX: 'CA', NSE: 'IN', BSE: 'IN',
-  LSE: 'GB', XETRA: 'DE'
+  NasdaqGS: 'US', NASDAQ: 'US', NYSE: 'US', Toronto: 'CA', TSX: 'CA',
+  NSE: 'IN', BSE: 'IN', LSE: 'GB', XETRA: 'DE'
 };
 
 export class YahooFinanceProvider implements StockDataProvider {
   async getQuote(symbol: string): Promise<RawQuote> {
     const quote: any = await yahooFinance.quote(symbol);
+    const exchange = quote.fullExchangeName ?? quote.exchange ?? 'Unknown';
     return {
       symbol: quote.symbol,
       companyName: quote.longName ?? quote.shortName ?? quote.symbol,
       sector: quote.sector ?? 'Unknown',
-      exchange: quote.fullExchangeName ?? quote.exchange ?? 'Unknown',
-      country: EXCHANGE_COUNTRY_MAP[quote.exchange] ?? 'Unknown',
+      exchange,
+      country: EXCHANGE_COUNTRY_MAP[exchange] ?? 'Unknown',
       currency: quote.currency,
       currentPrice: quote.regularMarketPrice
     };
@@ -32,8 +38,14 @@ export class YahooFinanceProvider implements StockDataProvider {
       ]
     });
 
+    // Yahoo returns cashflowStatements newest-first (verified empirically against
+    // the live API on a real AAPL response: endDate 2025-09-30, 2024-09-30,
+    // 2023-09-30, 2022-09-30 in that array order — see task-6-report.md
+    // "Fix round 1"). Reversed here to match RawFinancials' documented
+    // oldest-first, most-recent-last contract, which DcfFairValueCalculator relies on.
     const cashflowStatements = summary.cashflowStatementHistory?.cashflowStatements ?? [];
-    const freeCashFlowHistory = cashflowStatements
+    const freeCashFlowHistory = [...cashflowStatements]
+      .reverse()
       .map((s: any) => s.freeCashFlow)
       .filter((v: number | undefined) => typeof v === 'number');
 
