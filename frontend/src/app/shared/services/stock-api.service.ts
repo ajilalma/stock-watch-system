@@ -16,23 +16,23 @@ export class StockApiService {
   }
 
   addToPortfolio(symbol: string): Observable<Ticker> {
-    return this.http.post<Ticker>(`/api/portfolio/${symbol}`, {});
+    return this.http.post<Ticker>(`/api/portfolio/${encodeURIComponent(symbol)}`, {});
   }
 
   removeFromPortfolio(symbol: string): Observable<void> {
-    return this.http.delete<void>(`/api/portfolio/${symbol}`);
+    return this.http.delete<void>(`/api/portfolio/${encodeURIComponent(symbol)}`);
   }
 
   addToWatchlist(symbol: string): Observable<Ticker> {
-    return this.http.post<Ticker>(`/api/watchlist/${symbol}`, {});
+    return this.http.post<Ticker>(`/api/watchlist/${encodeURIComponent(symbol)}`, {});
   }
 
   removeFromWatchlist(symbol: string): Observable<void> {
-    return this.http.delete<void>(`/api/watchlist/${symbol}`);
+    return this.http.delete<void>(`/api/watchlist/${encodeURIComponent(symbol)}`);
   }
 
   refreshOne(symbol: string): Observable<Ticker> {
-    return this.http.post<Ticker>(`/api/tickers/${symbol}/refresh`, {});
+    return this.http.post<Ticker>(`/api/tickers/${encodeURIComponent(symbol)}/refresh`, {});
   }
 
   refreshMany(symbols: string[]): Observable<Ticker[]> {

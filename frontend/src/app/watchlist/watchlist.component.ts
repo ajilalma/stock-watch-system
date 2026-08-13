@@ -10,6 +10,7 @@ import { Ticker } from '../shared/models/ticker.model';
 export class WatchlistComponent implements OnInit {
   tickers: Ticker[] = [];
   newSymbol = '';
+  errorMessage: string | null = null;
 
   constructor(private api: StockApiService) {}
 
@@ -18,26 +19,51 @@ export class WatchlistComponent implements OnInit {
   }
 
   private load(): void {
-    this.api.getWatchlist().subscribe(tickers => this.tickers = tickers);
+    this.api.getWatchlist().subscribe({
+      next: tickers => this.tickers = tickers,
+      error: () => this.errorMessage = 'Could not load your watchlist. Please try again.'
+    });
   }
 
   addTicker(): void {
-    if (!this.newSymbol) return;
-    this.api.addToWatchlist(this.newSymbol).subscribe(() => {
-      this.newSymbol = '';
-      this.load();
+    const symbol = this.newSymbol.trim().toUpperCase();
+    if (!symbol) return;
+    this.errorMessage = null;
+    this.api.addToWatchlist(symbol).subscribe({
+      next: () => {
+        this.newSymbol = '';
+        this.load();
+      },
+      error: err => this.errorMessage = this.describeAddError(symbol, err)
     });
   }
 
   onRemove(symbol: string): void {
-    this.api.removeFromWatchlist(symbol).subscribe(() => this.load());
+    this.errorMessage = null;
+    this.api.removeFromWatchlist(symbol).subscribe({
+      next: () => this.load(),
+      error: () => this.errorMessage = `Could not remove ${symbol}. Please try again.`
+    });
   }
 
   onRefreshSelected(symbols: string[]): void {
-    this.api.refreshMany(symbols).subscribe(() => this.load());
+    this.errorMessage = null;
+    this.api.refreshMany(symbols).subscribe({
+      next: () => this.load(),
+      error: () => this.errorMessage = 'Could not refresh the selected tickers. Please try again.'
+    });
   }
 
   onRefreshAll(): void {
-    this.api.refreshAll().subscribe(() => this.load());
+    this.errorMessage = null;
+    this.api.refreshAll().subscribe({
+      next: () => this.load(),
+      error: () => this.errorMessage = 'Could not refresh tickers. Please try again.'
+    });
+  }
+
+  private describeAddError(symbol: string, err: any): string {
+    if (err?.status === 404) return `Could not find symbol ${symbol}.`;
+    return `Could not add ${symbol}. Please try again.`;
   }
 }

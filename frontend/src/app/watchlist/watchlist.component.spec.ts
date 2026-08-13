@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { vi } from 'vitest';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { WatchlistComponent } from './watchlist.component';
 import { StockApiService } from '../shared/services/stock-api.service';
 import { Ticker } from '../shared/models/ticker.model';
@@ -68,5 +68,32 @@ describe('WatchlistComponent', () => {
     component.onRefreshAll();
     expect(apiSpy.refreshAll).toHaveBeenCalled();
     expect(apiSpy.getWatchlist).toHaveBeenCalledTimes(2);
+  });
+
+  it('addTicker trims whitespace and uppercases the symbol before calling the API', () => {
+    apiSpy.addToWatchlist.mockReturnValue(of(sampleTickers[0]));
+    component.newSymbol = '  aapl  ';
+    component.addTicker();
+    expect(apiSpy.addToWatchlist).toHaveBeenCalledWith('AAPL');
+  });
+
+  it('sets errorMessage with a distinct message on a 404 (symbol not found)', () => {
+    apiSpy.addToWatchlist.mockReturnValue(throwError(() => ({ status: 404 })));
+    component.newSymbol = 'ZZZZINVALID123';
+    component.addTicker();
+    expect(component.errorMessage).toContain('ZZZZINVALID123');
+  });
+
+  it('sets errorMessage on a generic addToWatchlist failure instead of failing silently', () => {
+    apiSpy.addToWatchlist.mockReturnValue(throwError(() => ({ status: 500 })));
+    component.newSymbol = 'AAPL';
+    component.addTicker();
+    expect(component.errorMessage).toBeTruthy();
+  });
+
+  it('sets errorMessage when the initial watchlist load fails', () => {
+    apiSpy.getWatchlist.mockReturnValue(throwError(() => new Error('network down')));
+    component['load']();
+    expect(component.errorMessage).toBeTruthy();
   });
 });

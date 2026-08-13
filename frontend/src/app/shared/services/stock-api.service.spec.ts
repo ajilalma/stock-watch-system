@@ -52,4 +52,18 @@ describe('StockApiService', () => {
     expect(req.request.method).toBe('POST');
     req.flush([]);
   });
+
+  it('encodes symbols with special characters (e.g. index symbols like ^BSESN) in the URL', () => {
+    service.addToPortfolio('^BSESN').subscribe();
+    const req = httpMock.expectOne('/api/portfolio/%5EBSESN');
+    expect(req.request.method).toBe('POST');
+    req.flush({});
+  });
+
+  it('encodes symbols with special characters when refreshing one', () => {
+    service.refreshOne('^BSESN').subscribe();
+    const req = httpMock.expectOne('/api/tickers/%5EBSESN/refresh');
+    expect(req.request.method).toBe('POST');
+    req.flush({});
+  });
 });

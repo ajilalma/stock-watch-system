@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { vi } from 'vitest';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { PortfolioComponent } from './portfolio.component';
 import { StockApiService } from '../shared/services/stock-api.service';
 import { Ticker } from '../shared/models/ticker.model';
@@ -68,5 +68,40 @@ describe('PortfolioComponent', () => {
     component.onRefreshAll();
     expect(apiSpy.refreshAll).toHaveBeenCalled();
     expect(apiSpy.getPortfolio).toHaveBeenCalledTimes(2);
+  });
+
+  it('addTicker trims whitespace and uppercases the symbol before calling the API', () => {
+    apiSpy.addToPortfolio.mockReturnValue(of(sampleTickers[0]));
+    component.newSymbol = '  shop.to  ';
+    component.addTicker();
+    expect(apiSpy.addToPortfolio).toHaveBeenCalledWith('SHOP.TO');
+  });
+
+  it('sets errorMessage with a distinct message on a 404 (symbol not found)', () => {
+    apiSpy.addToPortfolio.mockReturnValue(throwError(() => ({ status: 404 })));
+    component.newSymbol = 'ZZZZINVALID123';
+    component.addTicker();
+    expect(component.errorMessage).toContain('ZZZZINVALID123');
+  });
+
+  it('sets errorMessage on a generic addToPortfolio failure instead of failing silently', () => {
+    apiSpy.addToPortfolio.mockReturnValue(throwError(() => ({ status: 500 })));
+    component.newSymbol = 'AAPL';
+    component.addTicker();
+    expect(component.errorMessage).toBeTruthy();
+  });
+
+  it('sets errorMessage when the initial portfolio load fails', () => {
+    apiSpy.getPortfolio.mockReturnValue(throwError(() => new Error('network down')));
+    component['load']();
+    expect(component.errorMessage).toBeTruthy();
+  });
+
+  it('clears errorMessage on a subsequent successful add', () => {
+    component.errorMessage = 'stale error';
+    apiSpy.addToPortfolio.mockReturnValue(of(sampleTickers[0]));
+    component.newSymbol = 'MSFT';
+    component.addTicker();
+    expect(component.errorMessage).toBeNull();
   });
 });

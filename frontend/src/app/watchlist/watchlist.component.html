@@ -1,4 +1,5 @@
 <h2>Watchlist</h2>
+<div class="error" *ngIf="errorMessage">{{ errorMessage }}</div>
 <div class="add-ticker">
   <input [(ngModel)]="newSymbol" placeholder="e.g. AAPL, RELIANCE.NS, SHOP.TO" />
   <button (click)="addTicker()">Add</button>
