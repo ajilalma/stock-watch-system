@@ -31,13 +31,14 @@
 
 table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   background: var(--bg-surface);
   font-size: 13px;
 }
 
 th, td {
-  padding: 0.5rem 0.75rem;
+  padding: 0.4rem 0.6rem;
   border-bottom: 1px solid var(--border-subtle);
   text-align: left;
   white-space: nowrap;
@@ -49,13 +50,25 @@ th {
   background: var(--bg-surface);
 }
 
+th:not(.sticky-col) {
+  white-space: normal;
+  max-width: 100px;
+  line-height: 1.25;
+}
+
 .sticky-col {
   position: sticky;
   background: var(--bg-surface);
 }
 
-.sticky-col-1 {
+.sticky-col-actions {
   left: 0;
+  width: 76px;
+  max-width: 76px;
+}
+
+.sticky-col-1 {
+  left: 76px;
   width: 100px;
   max-width: 100px;
   text-overflow: ellipsis;
@@ -63,8 +76,11 @@ th {
 }
 
 .sticky-col-2 {
-  left: 100px;
-  min-width: 160px;
+  left: 176px;
+  width: 160px;
+  max-width: 160px;
+  text-overflow: ellipsis;
+  overflow: hidden;
   border-right: 1px solid var(--border-subtle);
 }
 

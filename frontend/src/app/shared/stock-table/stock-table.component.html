@@ -8,6 +8,7 @@
   <table>
     <thead>
       <tr>
+        <th class="sticky-col sticky-col-actions"></th>
         <th class="sticky-col sticky-col-1">Ticker</th>
         <th class="sticky-col sticky-col-2">Company</th>
         <th>Current Price</th>
@@ -22,7 +23,6 @@
         <th>Last Dividend Date</th>
         <th>Last Dividend Amount</th>
         <th>Payout Ratio</th>
-        <th></th>
       </tr>
     </thead>
     <tbody *ngFor="let group of groupedBySector()">
@@ -36,6 +36,12 @@
         </td>
       </tr>
       <tr *ngFor="let ticker of group.tickers" [hidden]="isCollapsed(group.sector)">
+        <td class="sticky-col sticky-col-actions">
+          <span class="row-actions">
+            <button type="button" class="icon-btn refresh-btn" [class.spinning]="isRefreshing(ticker.symbol)" [disabled]="isRefreshing(ticker.symbol)" title="Refresh" (click)="onRefreshClick(ticker.symbol)">↻</button>
+            <button type="button" class="icon-btn remove-btn" title="Remove" (click)="onRemoveClick(ticker.symbol)">×</button>
+          </span>
+        </td>
         <td class="sticky-col sticky-col-1">{{ ticker.symbol }}</td>
         <td class="sticky-col sticky-col-2">{{ ticker.companyName }}</td>
         <td [class]="ticker.cachedData?.currentPrice! | marginOfSafetyColor:ticker.cachedData?.fairValue">
@@ -52,12 +58,6 @@
         <td>{{ ticker.cachedData?.lastDividendDate | date:'yyyy-MM-dd' }}</td>
         <td>{{ ticker.cachedData?.lastDividendAmount | number:'1.2-2' }}</td>
         <td [class]="ticker.cachedData?.payoutRatio | payoutRatioColor">{{ ticker.cachedData?.payoutRatio | percent }}</td>
-        <td>
-          <span class="row-actions">
-            <button type="button" class="icon-btn refresh-btn" [class.spinning]="isRefreshing(ticker.symbol)" [disabled]="isRefreshing(ticker.symbol)" title="Refresh" (click)="onRefreshClick(ticker.symbol)">↻</button>
-            <button type="button" class="icon-btn remove-btn" title="Remove" (click)="onRemoveClick(ticker.symbol)">×</button>
-          </span>
-        </td>
       </tr>
     </tbody>
   </table>
