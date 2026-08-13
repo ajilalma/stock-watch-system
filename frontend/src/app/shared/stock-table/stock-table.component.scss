@@ -31,6 +31,7 @@
 
 table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
   background: var(--bg-surface);
@@ -42,6 +43,8 @@ th, td {
   border-bottom: 1px solid var(--border-subtle);
   text-align: left;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 th {
@@ -52,8 +55,39 @@ th {
 
 th:not(.sticky-col) {
   white-space: normal;
-  max-width: 100px;
   line-height: 1.25;
+}
+
+// table-layout: fixed reads column widths from this header row only —
+// every column needs an explicit width here, or the browser splits
+// leftover space arbitrarily. Body cells never redefine width; content
+// that doesn't fit is clipped/ellipsized rather than growing the column.
+.sticky-col-actions {
+  width: 76px;
+}
+
+.sticky-col-1 {
+  width: 100px;
+}
+
+.sticky-col-2 {
+  width: 160px;
+}
+
+.col-price, .col-amount, .col-percent {
+  width: 90px;
+}
+
+.col-ratio {
+  width: 70px;
+}
+
+.col-industry {
+  width: 95px;
+}
+
+.col-date {
+  width: 105px;
 }
 
 .sticky-col {
@@ -63,24 +97,14 @@ th:not(.sticky-col) {
 
 .sticky-col-actions {
   left: 0;
-  width: 76px;
-  max-width: 76px;
 }
 
 .sticky-col-1 {
   left: 76px;
-  width: 100px;
-  max-width: 100px;
-  text-overflow: ellipsis;
-  overflow: hidden;
 }
 
 .sticky-col-2 {
   left: 176px;
-  width: 160px;
-  max-width: 160px;
-  text-overflow: ellipsis;
-  overflow: hidden;
   border-right: 1px solid var(--border-subtle);
 }
 
