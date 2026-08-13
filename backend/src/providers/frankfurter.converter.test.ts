@@ -24,4 +24,15 @@ describe('FrankfurterConverter', () => {
     expect(rate).toBe(1);
     expect(global.fetch).not.toHaveBeenCalled();
   });
+
+  test('throws error when target currency is not in API response', async () => {
+    global.fetch = jest.fn(async () =>
+      ({
+        ok: true,
+        json: async () => ({ amount: 1, base: 'INR', date: '2026-08-12', rates: {} })
+      } as Response)
+    );
+    const converter = new FrankfurterConverter();
+    await expect(converter.getRate('INR', 'XYZ')).rejects.toThrow('Currency XYZ not found in Frankfurter response');
+  });
 });

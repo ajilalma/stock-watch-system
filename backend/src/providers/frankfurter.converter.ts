@@ -11,6 +11,10 @@ export class FrankfurterConverter implements CurrencyConverter {
       throw new Error(`Frankfurter API error: ${response.status}`);
     }
     const data = await response.json() as { rates: Record<string, number> };
-    return data.rates[toCurrency];
+    const rate = data.rates[toCurrency];
+    if (rate === undefined) {
+      throw new Error(`Currency ${toCurrency} not found in Frankfurter response`);
+    }
+    return rate;
   }
 }
