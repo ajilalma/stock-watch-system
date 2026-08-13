@@ -12,7 +12,7 @@ export class PortfolioComponent implements OnInit {
   newSymbol = '';
   errorMessage: string | null = null;
   isAdding = false;
-  isLoading = false;
+  isLoading = true;
 
   constructor(private api: StockApiService, private cdr: ChangeDetectorRef) {}
 
@@ -21,7 +21,6 @@ export class PortfolioComponent implements OnInit {
   }
 
   private load(): void {
-    this.isLoading = true;
     this.api.getPortfolio().subscribe({
       next: tickers => {
         this.tickers = tickers;

@@ -9,7 +9,7 @@
 <div class="error-banner" *ngIf="errorMessage">{{ errorMessage }}</div>
 
 <div class="loading-state" *ngIf="isLoading">Loading…</div>
-<div class="empty-state" *ngIf="!isLoading && tickers.length === 0">No tickers yet — add one above.</div>
+<div class="empty-state" *ngIf="!isLoading && !errorMessage && tickers.length === 0">No tickers yet — add one above.</div>
 
 <app-stock-table
   *ngIf="!isLoading && tickers.length > 0"

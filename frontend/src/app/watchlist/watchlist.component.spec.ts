@@ -48,6 +48,12 @@ describe('WatchlistComponent', () => {
     expect(component.isLoading).toBe(false);
   });
 
+  it('isLoading does not flip back to true on a subsequent reload (e.g. after onRemove)', () => {
+    apiSpy.removeFromWatchlist.mockReturnValue(of(undefined));
+    component.onRemove('RELIANCE.NS');
+    expect(component.isLoading).toBe(false);
+  });
+
   it('addTicker calls addToWatchlist and reloads the list', () => {
     apiSpy.addToWatchlist.mockReturnValue(of(sampleTickers[0]));
     component.newSymbol = 'SHOP.TO';

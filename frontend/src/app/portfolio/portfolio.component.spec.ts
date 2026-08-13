@@ -48,6 +48,12 @@ describe('PortfolioComponent', () => {
     expect(component.isLoading).toBe(false);
   });
 
+  it('isLoading does not flip back to true on a subsequent reload (e.g. after onRemove)', () => {
+    apiSpy.removeFromPortfolio.mockReturnValue(of(undefined));
+    component.onRemove('AAPL');
+    expect(component.isLoading).toBe(false);
+  });
+
   it('addTicker calls addToPortfolio and reloads the list', () => {
     apiSpy.addToPortfolio.mockReturnValue(of(sampleTickers[0]));
     component.newSymbol = 'MSFT';
