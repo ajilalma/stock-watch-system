@@ -2,56 +2,47 @@
 import { YahooFinanceProvider } from './yahoo-finance.provider';
 import { SymbolNotFoundError } from '../errors/symbol-not-found.error';
 
-const quoteMock = jest.fn(async () => ({
-  symbol: 'AAPL',
-  longName: 'Apple Inc.',
-  fullExchangeName: 'NASDAQ',
-  currency: 'USD',
-  regularMarketPrice: 190
-}));
-
-// quoteSummary is called twice by the provider: once from getQuote() (just
-// for the `summaryProfile` module, to get `sector`) and once from
-// getFinancials() (for the other modules). Branch on the requested modules
-// like the real API effectively does (different modules, different data).
-const quoteSummaryMock = jest.fn(async (_symbol: string, opts: { modules: string[] }) => {
-  if (opts.modules.includes('summaryProfile')) {
-    return { summaryProfile: { sector: 'Technology' } };
+// getQuote() and getFinancials() now share a single quoteSummary() call
+// (requesting all modules at once) instead of 3 separate Yahoo requests.
+const quoteSummaryMock = jest.fn(async () => ({
+  price: {
+    symbol: 'AAPL',
+    longName: 'Apple Inc.',
+    exchangeName: 'NASDAQ',
+    currency: 'USD',
+    regularMarketPrice: 190
+  },
+  summaryProfile: { sector: 'Technology' },
+  defaultKeyStatistics: { sharesOutstanding: 15000000000, bookValue: 4.5 },
+  financialData: { currentRatio: 1.1, quickRatio: 0.9, earningsGrowth: 0.08 },
+  summaryDetail: {
+    payoutRatio: 0.16,
+    dividendRate: 1.0,
+    priceToBook: 42
+  },
+  // Yahoo returns this array newest-first (verified empirically against
+  // the live API, see task-6-report.md "Fix round 1"): index 0 is the
+  // most recent period.
+  cashflowStatementHistory: {
+    cashflowStatements: [
+      { freeCashFlow: 95000000000 }, // most recent
+      { freeCashFlow: 90000000000 }  // prior period
+    ]
   }
-  return {
-    defaultKeyStatistics: { sharesOutstanding: 15000000000, bookValue: 4.5 },
-    financialData: { currentRatio: 1.1, quickRatio: 0.9, earningsGrowth: 0.08 },
-    summaryDetail: {
-      payoutRatio: 0.16,
-      dividendRate: 1.0,
-      priceToBook: 42
-    },
-    // Yahoo returns this array newest-first (verified empirically against
-    // the live API, see task-6-report.md "Fix round 1"): index 0 is the
-    // most recent period.
-    cashflowStatementHistory: {
-      cashflowStatements: [
-        { freeCashFlow: 95000000000 }, // most recent
-        { freeCashFlow: 90000000000 }  // prior period
-      ]
-    }
-  };
-});
+}));
 
 jest.mock('yahoo-finance2', () => ({
   __esModule: true,
   default: {
-    quote: (...args: unknown[]) => quoteMock(...(args as [])),
-    quoteSummary: (...args: unknown[]) => quoteSummaryMock(...(args as [string, { modules: string[] }]))
+    quoteSummary: (...args: unknown[]) => quoteSummaryMock(...(args as []))
   }
 }));
 
 beforeEach(() => {
-  quoteMock.mockClear();
   quoteSummaryMock.mockClear();
 });
 
-test('getQuote maps Yahoo quote fields to RawQuote, with sector from the summaryProfile module', async () => {
+test('getQuote maps Yahoo price/summaryProfile fields to RawQuote', async () => {
   const provider = new YahooFinanceProvider();
   const quote = await provider.getQuote('AAPL');
   expect(quote).toEqual({
@@ -65,14 +56,14 @@ test('getQuote maps Yahoo quote fields to RawQuote, with sector from the summary
   });
 });
 
-test('getQuote throws SymbolNotFoundError when Yahoo has no quote for the symbol', async () => {
-  quoteMock.mockImplementationOnce(async () => undefined as any);
+test('getQuote throws SymbolNotFoundError when Yahoo has no price module for the symbol', async () => {
+  quoteSummaryMock.mockImplementationOnce(async () => ({} as any));
   const provider = new YahooFinanceProvider();
   await expect(provider.getQuote('ZZZZINVALID123')).rejects.toBeInstanceOf(SymbolNotFoundError);
 });
 
 test('getQuote throws SymbolNotFoundError when the underlying API reports "not found"', async () => {
-  quoteMock.mockImplementationOnce(async () => {
+  quoteSummaryMock.mockImplementationOnce(async () => {
     throw new Error('Quote not found for symbol: ZZZZINVALID123');
   });
   const provider = new YahooFinanceProvider();
@@ -94,4 +85,18 @@ test('getFinancials passes through Yahoo-computed currentRatio and quickRatio as
   expect(financials.currentRatio).toBe(1.1);
   expect(financials.quickRatio).toBe(0.9);
   expect(financials.quickRatio).not.toBe(financials.currentRatio);
+});
+
+test('getQuote followed by getFinancials for the same symbol reuses one quoteSummary call', async () => {
+  const provider = new YahooFinanceProvider();
+  await provider.getQuote('AAPL');
+  await provider.getFinancials('AAPL');
+  expect(quoteSummaryMock).toHaveBeenCalledTimes(1);
+});
+
+test('requests for different symbols each trigger their own quoteSummary call', async () => {
+  const provider = new YahooFinanceProvider();
+  await provider.getQuote('AAPL');
+  await provider.getQuote('MSFT');
+  expect(quoteSummaryMock).toHaveBeenCalledTimes(2);
 });

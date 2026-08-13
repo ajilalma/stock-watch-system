@@ -25,59 +25,79 @@ function isNotFoundError(err: unknown): boolean {
   return err instanceof Error && NOT_FOUND_MESSAGE_PATTERN.test(err.message);
 }
 
+const ALL_MODULES = [
+  'price',
+  'summaryProfile',
+  'defaultKeyStatistics',
+  'financialData',
+  'summaryDetail',
+  'cashflowStatementHistory'
+] as const;
+
+// How long a fetched quoteSummary is reused across getQuote()/getFinancials()
+// calls for the same symbol. TickerService.fetchCachedData always calls both
+// back-to-back for one symbol, so this collapses what used to be 3 separate
+// Yahoo requests (quote + summaryProfile + financials) into 1. Short window,
+// not a real cache - just wide enough to cover those two sequential calls.
+const SUMMARY_REUSE_WINDOW_MS = 10_000;
+
 export class YahooFinanceProvider implements StockDataProvider {
-  async getQuote(symbol: string): Promise<RawQuote> {
-    const quote: any = await yahooFinance.quote(symbol).catch((err: unknown) => {
-      if (isNotFoundError(err)) throw new SymbolNotFoundError(symbol);
-      throw err;
-    });
-    // For an unknown symbol, yahoo-finance2's quote() resolves to `undefined`
-    // rather than throwing (verified empirically: the underlying v7/finance/quote
-    // endpoint returns HTTP 200 with an empty result array for a bad symbol,
-    // so the library has nothing to throw on).
-    if (!quote) throw new SymbolNotFoundError(symbol);
+  private pendingSummaries = new Map<string, Promise<any>>();
 
-    const profile = await this.fetchSummaryProfile(symbol);
+  // NOTE: the `price` module's exact field names (exchangeName vs
+  // fullExchangeName vs exchange) have NOT been empirically verified against
+  // the live API yet - Yahoo was rate-limiting at the time this was written.
+  // The fallback chains below cover the field names documented/observed for
+  // this module, but should be spot-checked against a real response (e.g.
+  // console.log(JSON.stringify(summary.price)) for AAPL) once requests are
+  // going through again, the same way the cashflowStatements ordering and
+  // the original quote()/EXCHANGE_COUNTRY_MAP mapping were verified.
+  private fetchQuoteSummary(symbol: string): Promise<any> {
+    const cached = this.pendingSummaries.get(symbol);
+    if (cached) return cached;
 
-    const exchange = quote.fullExchangeName ?? quote.exchange ?? 'Unknown';
-    return {
-      symbol: quote.symbol,
-      companyName: quote.longName ?? quote.shortName ?? quote.symbol,
-      sector: profile?.sector ?? 'Unknown',
-      exchange,
-      country: EXCHANGE_COUNTRY_MAP[exchange] ?? 'Unknown',
-      currency: quote.currency,
-      currentPrice: quote.regularMarketPrice
-    };
+    const promise = (yahooFinance.quoteSummary as any)(symbol, { modules: ALL_MODULES });
+    this.pendingSummaries.set(symbol, promise);
+    setTimeout(() => {
+      if (this.pendingSummaries.get(symbol) === promise) {
+        this.pendingSummaries.delete(symbol);
+      }
+    }, SUMMARY_REUSE_WINDOW_MS).unref?.();
+
+    return promise;
   }
 
-  // Sector lives in the `summaryProfile` quoteSummary module, not on the
-  // `quote()` response (verified against the live API and the installed
-  // yahoo-finance2 typings: quote.d.ts has zero occurrences of "sector").
-  private async fetchSummaryProfile(symbol: string): Promise<{ sector?: string } | undefined> {
+  private async getSummary(symbol: string): Promise<any> {
     try {
-      const summary: any = await (yahooFinance.quoteSummary as any)(symbol, {
-        modules: ['summaryProfile']
-      });
-      return summary.summaryProfile;
+      return await this.fetchQuoteSummary(symbol);
     } catch (err) {
       if (isNotFoundError(err)) throw new SymbolNotFoundError(symbol);
       throw err;
     }
   }
 
+  async getQuote(symbol: string): Promise<RawQuote> {
+    const summary = await this.getSummary(symbol);
+    const price = summary.price;
+    // An unknown symbol can come back as a 200 with an empty/missing `price`
+    // module rather than a thrown error (this was quote()'s behavior before
+    // the single-call merge; carrying the same guard forward defensively).
+    if (!price) throw new SymbolNotFoundError(symbol);
+
+    const exchange = price.exchangeName ?? price.fullExchangeName ?? price.exchange ?? 'Unknown';
+    return {
+      symbol: price.symbol ?? symbol,
+      companyName: price.longName ?? price.shortName ?? price.symbol ?? symbol,
+      sector: summary.summaryProfile?.sector ?? 'Unknown',
+      exchange,
+      country: EXCHANGE_COUNTRY_MAP[exchange] ?? 'Unknown',
+      currency: price.currency,
+      currentPrice: price.regularMarketPrice
+    };
+  }
+
   async getFinancials(symbol: string): Promise<RawFinancials> {
-    const summary: any = await (yahooFinance.quoteSummary as any)(symbol, {
-      modules: [
-        'defaultKeyStatistics',
-        'financialData',
-        'summaryDetail',
-        'cashflowStatementHistory'
-      ]
-    }).catch((err: unknown) => {
-      if (isNotFoundError(err)) throw new SymbolNotFoundError(symbol);
-      throw err;
-    });
+    const summary = await this.getSummary(symbol);
 
     // Yahoo returns cashflowStatements newest-first (verified empirically against
     // the live API on a real AAPL response: endDate 2025-09-30, 2024-09-30,
