@@ -1,0 +1,11 @@
+{
+  "name": "value-investing",
+  "private": true,
+  "workspaces": ["backend", "frontend"],
+  "scripts": {
+    "start": "concurrently -n backend,frontend -c blue,green \"npm run dev -w backend\" \"npm start -w frontend\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
