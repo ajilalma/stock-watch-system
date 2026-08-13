@@ -56,11 +56,14 @@ th {
 
 .sticky-col-1 {
   left: 0;
-  min-width: 80px;
+  width: 100px;
+  max-width: 100px;
+  text-overflow: ellipsis;
+  overflow: hidden;
 }
 
 .sticky-col-2 {
-  left: 80px;
+  left: 100px;
   min-width: 160px;
   border-right: 1px solid var(--border-subtle);
 }
@@ -80,6 +83,12 @@ th {
 }
 
 .sector-label {
+  background: none;
+  border: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
   position: sticky;
   left: 0;
   display: inline-block;
@@ -96,7 +105,7 @@ th {
   font-weight: 400;
 }
 
-tbody tr:not(.sector-header):hover td {
+tbody tr:not(.sector-header):hover td:not(.green):not(.yellow):not(.red) {
   background: var(--bg-surface-raised);
 }
 
@@ -119,6 +128,20 @@ tbody tr:not(.sector-header):hover td {
   &:hover {
     background: var(--bg-surface-raised);
   }
+
+  &:disabled {
+    cursor: default;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinning {
+  animation: spin 0.8s linear infinite;
 }
 
 .refresh-btn:hover {

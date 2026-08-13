@@ -26,13 +26,13 @@
       </tr>
     </thead>
     <tbody *ngFor="let group of groupedBySector()">
-      <tr class="sector-header" (click)="toggleSector(group.sector)">
+      <tr class="sector-header">
         <td colspan="15">
-          <span class="sector-label">
+          <button type="button" class="sector-label" (click)="toggleSector(group.sector)">
             <span class="chevron">{{ isCollapsed(group.sector) ? '▸' : '▾' }}</span>
             {{ group.sector }}
             <span class="sector-count">({{ group.tickers.length }})</span>
-          </span>
+          </button>
         </td>
       </tr>
       <tr *ngFor="let ticker of group.tickers" [hidden]="isCollapsed(group.sector)">
@@ -52,9 +52,11 @@
         <td>{{ ticker.cachedData?.lastDividendDate | date:'yyyy-MM-dd' }}</td>
         <td>{{ ticker.cachedData?.lastDividendAmount | number:'1.2-2' }}</td>
         <td [class]="ticker.cachedData?.payoutRatio | payoutRatioColor">{{ ticker.cachedData?.payoutRatio | percent }}</td>
-        <td class="row-actions">
-          <button type="button" class="icon-btn refresh-btn" title="Refresh" (click)="onRefreshClick(ticker.symbol)">↻</button>
-          <button type="button" class="icon-btn remove-btn" title="Remove" (click)="onRemoveClick(ticker.symbol)">×</button>
+        <td>
+          <span class="row-actions">
+            <button type="button" class="icon-btn refresh-btn" [class.spinning]="isRefreshing(ticker.symbol)" [disabled]="isRefreshing(ticker.symbol)" title="Refresh" (click)="onRefreshClick(ticker.symbol)">↻</button>
+            <button type="button" class="icon-btn remove-btn" title="Remove" (click)="onRemoveClick(ticker.symbol)">×</button>
+          </span>
         </td>
       </tr>
     </tbody>

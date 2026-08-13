@@ -78,4 +78,35 @@ describe('StockTableComponent', () => {
     component.onRemoveClick('AAA');
     expect(emitted).toEqual(['AAA']);
   });
+
+  it('onRefreshClick sets refreshingSymbol to the clicked symbol', () => {
+    component.onRefreshClick('AAA');
+    expect(component.refreshingSymbol).toBe('AAA');
+  });
+
+  it('isRefreshing returns true only for the currently refreshing symbol', () => {
+    component.onRefreshClick('AAA');
+    expect(component.isRefreshing('AAA')).toBe(true);
+    expect(component.isRefreshing('BBB')).toBe(false);
+  });
+
+  it('ngOnChanges clears refreshingSymbol when tickers changes', () => {
+    component.onRefreshClick('AAA');
+    expect(component.refreshingSymbol).toBe('AAA');
+    component.ngOnChanges({ tickers: {} as any });
+    expect(component.refreshingSymbol).toBeNull();
+  });
+
+  it('ngOnChanges prunes a collapsed sector once it no longer appears in tickers, leaving other collapsed sectors intact', () => {
+    component.toggleSector('Technology');
+    component.toggleSector('Energy');
+    expect(component.isCollapsed('Technology')).toBe(true);
+    expect(component.isCollapsed('Energy')).toBe(true);
+
+    component.tickers = tickers.filter(t => t.sector !== 'Technology');
+    component.ngOnChanges({ tickers: {} as any });
+
+    expect(component.isCollapsed('Technology')).toBe(false);
+    expect(component.isCollapsed('Energy')).toBe(true);
+  });
 });

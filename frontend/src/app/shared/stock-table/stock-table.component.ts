@@ -18,6 +18,7 @@ export class StockTableComponent implements OnChanges {
   @Output() remove = new EventEmitter<string>();
 
   collapsedSectors = new Set<string>();
+  refreshingSymbol: string | null = null;
 
   ngOnChanges(changes: SimpleChanges): void {
     if (!changes['tickers']) return;
@@ -27,6 +28,7 @@ export class StockTableComponent implements OnChanges {
         this.collapsedSectors.delete(sector);
       }
     }
+    this.refreshingSymbol = null;
   }
 
   groupedBySector(): SectorGroup[] {
@@ -65,7 +67,12 @@ export class StockTableComponent implements OnChanges {
   }
 
   onRefreshClick(symbol: string): void {
+    this.refreshingSymbol = symbol;
     this.refreshOne.emit(symbol);
+  }
+
+  isRefreshing(symbol: string): boolean {
+    return this.refreshingSymbol === symbol;
   }
 
   onRemoveClick(symbol: string): void {
