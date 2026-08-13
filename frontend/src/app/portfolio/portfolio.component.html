@@ -1,12 +1,19 @@
-<h2>Portfolio</h2>
-<div class="error" *ngIf="errorMessage">{{ errorMessage }}</div>
-<div class="add-ticker">
-  <input [(ngModel)]="newSymbol" placeholder="e.g. AAPL, RELIANCE.NS, SHOP.TO" [disabled]="isAdding" />
-  <button (click)="addTicker()" [disabled]="isAdding">{{ isAdding ? 'Adding…' : 'Add' }}</button>
+<div class="page-header">
+  <h2>Portfolio</h2>
+  <div class="add-ticker-form">
+    <input [(ngModel)]="newSymbol" placeholder="e.g. AAPL, RELIANCE.NS, SHOP.TO" [disabled]="isAdding" />
+    <button (click)="addTicker()" [disabled]="isAdding">{{ isAdding ? 'Adding…' : 'Add' }}</button>
+  </div>
 </div>
+
+<div class="error-banner" *ngIf="errorMessage">{{ errorMessage }}</div>
+
+<div class="loading-state" *ngIf="isLoading">Loading…</div>
+<div class="empty-state" *ngIf="!isLoading && tickers.length === 0">No tickers yet — add one above.</div>
+
 <app-stock-table
+  *ngIf="!isLoading && tickers.length > 0"
   [tickers]="tickers"
-  (refreshSelected)="onRefreshSelected($event)"
-  (refreshAllEmitter)="onRefreshAll()"
+  (refreshOne)="onRefreshOne($event)"
   (remove)="onRemove($event)">
 </app-stock-table>
