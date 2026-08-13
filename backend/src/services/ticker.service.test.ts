@@ -21,9 +21,8 @@ const fakeProvider: StockDataProvider = {
     bookValuePerShare: 50,
     earningsPerShare: 5,
     earningsGrowthRate: 10,
-    currentAssets: 200,
-    currentLiabilities: 100,
-    inventory: 20,
+    currentRatio: 2,
+    quickRatio: 1.6,
     dividendsPaidTTM: 20,
     netIncomeTTM: 100
   })
@@ -62,6 +61,30 @@ test('addTicker creates a new ticker doc with fetched+cached data', async () => 
   expect(ticker.lists).toEqual(['portfolio']);
   expect(ticker.cachedData?.currentPrice).toBe(100);
   expect(ticker.cachedData?.fairValue).toBe(120);
+});
+
+test('addTicker normalizes symbol casing so "aapl" then "AAPL" results in one document', async () => {
+  const service = new TickerService(fakeProvider, fakeCalculator, fakeConverter);
+  await service.addTicker('aapl', 'portfolio');
+  const second = await service.addTicker('AAPL', 'watchlist');
+
+  const count = await TickerModel.countDocuments({});
+  expect(count).toBe(1);
+  expect(second.symbol).toBe('AAPL');
+  expect(second.lists.sort()).toEqual(['portfolio', 'watchlist']);
+});
+
+test('addTicker stores the canonical symbol Yahoo echoes back, not the raw route param', async () => {
+  const echoingProvider: StockDataProvider = {
+    ...fakeProvider,
+    getQuote: async (symbol: string) => ({
+      symbol: symbol.toUpperCase(), companyName: `${symbol} Inc.`, sector: 'Technology',
+      exchange: 'NASDAQ', country: 'US', currency: 'USD', currentPrice: 100
+    })
+  };
+  const service = new TickerService(echoingProvider, fakeCalculator, fakeConverter);
+  const ticker = await service.addTicker('  aapl  ', 'portfolio');
+  expect(ticker.symbol).toBe('AAPL');
 });
 
 test('addTicker adds a second list to an existing ticker instead of duplicating', async () => {

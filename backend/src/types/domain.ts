@@ -15,9 +15,14 @@ export interface RawFinancials {
   bookValuePerShare: number;
   earningsPerShare: number;
   earningsGrowthRate?: number; // for PEG, as a percentage e.g. 12 = 12%
-  currentAssets: number;
-  currentLiabilities: number;
-  inventory: number;
+  // Yahoo's `financialData` module returns these as finished ratios rather
+  // than raw balance-sheet line items (verified empirically: `financialData`
+  // does not expose totalCurrentAssets, and `balanceSheetHistory` no longer
+  // returns real balance-sheet figures for most symbols via the public API -
+  // see yahoo-finance.provider.ts for details). Carrying the ratios through
+  // directly avoids reconstructing them from unavailable/fabricated inputs.
+  currentRatio: number;
+  quickRatio: number;
   lastDividendDate?: Date;
   lastDividendAmount?: number;
   dividendsPaidTTM?: number;

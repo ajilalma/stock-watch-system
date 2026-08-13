@@ -4,8 +4,11 @@ export class RatioService {
   static compute(quote: RawQuote, financials: RawFinancials): RatioResult {
     const priceToBook = quote.currentPrice / financials.bookValuePerShare;
 
-    const currentRatio = financials.currentAssets / financials.currentLiabilities;
-    const quickRatio = (financials.currentAssets - financials.inventory) / financials.currentLiabilities;
+    // currentRatio/quickRatio are Yahoo-computed values passed through as-is
+    // (see RawFinancials for why they aren't reconstructed from raw asset/
+    // liability/inventory figures).
+    const currentRatio = financials.currentRatio;
+    const quickRatio = financials.quickRatio;
 
     let pegRatio: number | undefined;
     if (financials.earningsGrowthRate && financials.earningsGrowthRate !== 0) {

@@ -2,6 +2,7 @@
 import yahooFinance from 'yahoo-finance2';
 import { StockDataProvider } from './stock-data-provider.interface';
 import { RawQuote, RawFinancials } from '../types/domain';
+import { SymbolNotFoundError } from '../errors/symbol-not-found.error';
 
 // Keyed on `fullExchangeName` (NOT `exchange`, which is Yahoo's short internal
 // code, e.g. NMS/NYQ/TOR/NSI/GER — verified empirically against the live API,
@@ -13,19 +14,56 @@ const EXCHANGE_COUNTRY_MAP: Record<string, string> = {
   NSE: 'IN', BSE: 'IN', LSE: 'GB', XETRA: 'DE'
 };
 
+// Yahoo's error payload for an unknown symbol on quoteSummary reads
+// `{"quoteSummary":{"result":null,"error":{"code":"Not Found","description":
+// "Quote not found for symbol: X"}}}` (verified empirically against the live
+// API for a garbage symbol) — yahoo-finance2 turns that into a generic Error
+// whose message contains "not found". Matched case-insensitively below.
+const NOT_FOUND_MESSAGE_PATTERN = /not found/i;
+
+function isNotFoundError(err: unknown): boolean {
+  return err instanceof Error && NOT_FOUND_MESSAGE_PATTERN.test(err.message);
+}
+
 export class YahooFinanceProvider implements StockDataProvider {
   async getQuote(symbol: string): Promise<RawQuote> {
-    const quote: any = await yahooFinance.quote(symbol);
+    const quote: any = await yahooFinance.quote(symbol).catch((err: unknown) => {
+      if (isNotFoundError(err)) throw new SymbolNotFoundError(symbol);
+      throw err;
+    });
+    // For an unknown symbol, yahoo-finance2's quote() resolves to `undefined`
+    // rather than throwing (verified empirically: the underlying v7/finance/quote
+    // endpoint returns HTTP 200 with an empty result array for a bad symbol,
+    // so the library has nothing to throw on).
+    if (!quote) throw new SymbolNotFoundError(symbol);
+
+    const profile = await this.fetchSummaryProfile(symbol);
+
     const exchange = quote.fullExchangeName ?? quote.exchange ?? 'Unknown';
     return {
       symbol: quote.symbol,
       companyName: quote.longName ?? quote.shortName ?? quote.symbol,
-      sector: quote.sector ?? 'Unknown',
+      sector: profile?.sector ?? 'Unknown',
       exchange,
       country: EXCHANGE_COUNTRY_MAP[exchange] ?? 'Unknown',
       currency: quote.currency,
       currentPrice: quote.regularMarketPrice
     };
+  }
+
+  // Sector lives in the `summaryProfile` quoteSummary module, not on the
+  // `quote()` response (verified against the live API and the installed
+  // yahoo-finance2 typings: quote.d.ts has zero occurrences of "sector").
+  private async fetchSummaryProfile(symbol: string): Promise<{ sector?: string } | undefined> {
+    try {
+      const summary: any = await (yahooFinance.quoteSummary as any)(symbol, {
+        modules: ['summaryProfile']
+      });
+      return summary.summaryProfile;
+    } catch (err) {
+      if (isNotFoundError(err)) throw new SymbolNotFoundError(symbol);
+      throw err;
+    }
   }
 
   async getFinancials(symbol: string): Promise<RawFinancials> {
@@ -36,6 +74,9 @@ export class YahooFinanceProvider implements StockDataProvider {
         'summaryDetail',
         'cashflowStatementHistory'
       ]
+    }).catch((err: unknown) => {
+      if (isNotFoundError(err)) throw new SymbolNotFoundError(symbol);
+      throw err;
     });
 
     // Yahoo returns cashflowStatements newest-first (verified empirically against
@@ -58,11 +99,15 @@ export class YahooFinanceProvider implements StockDataProvider {
       earningsGrowthRate: summary.financialData?.earningsGrowth
         ? summary.financialData.earningsGrowth * 100
         : undefined,
-      currentAssets: summary.financialData?.currentRatio && summary.financialData?.totalCurrentLiabilities
-        ? summary.financialData.currentRatio * summary.financialData.totalCurrentLiabilities
-        : summary.financialData?.currentRatio, // fallback if raw asset/liability figures unavailable
-      currentLiabilities: summary.financialData?.totalCurrentLiabilities ?? 1,
-      inventory: summary.financialData?.inventory ?? 0,
+      // Yahoo's `financialData` module returns finished ratios directly; it does
+      // NOT expose totalCurrentAssets/totalCurrentLiabilities/inventory (those
+      // would need `balanceSheetHistory`, which - verified empirically against
+      // the live API for a real symbol - no longer returns real balance-sheet
+      // figures via the public endpoint, only {maxAge, endDate} per statement).
+      // Passing the Yahoo-computed ratios through avoids reconstructing them
+      // from unavailable/fabricated inputs (see RatioService).
+      currentRatio: summary.financialData?.currentRatio,
+      quickRatio: summary.financialData?.quickRatio,
       lastDividendDate: summary.summaryDetail?.exDividendDate
         ? new Date(summary.summaryDetail.exDividendDate)
         : undefined,

@@ -7,9 +7,8 @@ const financials: RawFinancials = {
   sharesOutstanding: 100,
   bookValuePerShare: 10,
   earningsPerShare: 2,
-  currentAssets: 500,
-  currentLiabilities: 250,
-  inventory: 100
+  currentRatio: 2,
+  quickRatio: 1.6
 };
 
 test('calculates a positive fair value per share using capped historical growth', async () => {
@@ -37,4 +36,39 @@ test('throws if fewer than 2 years of free cash flow history are provided', asyn
   await expect(
     calculator.calculate({ ...financials, freeCashFlowHistory: [100] })
   ).rejects.toThrow();
+});
+
+test('excludes year-over-year comparisons where the prior year FCF was zero or negative', async () => {
+  // -50 -> 100 would be a nonsensical growth rate (dividing by a negative base);
+  // that comparison should be skipped, leaving only 100 -> 110 (10% growth).
+  const negativePriorYear: RawFinancials = {
+    ...financials,
+    freeCashFlowHistory: [-50, 100, 110]
+  };
+  const calculator = new DcfFairValueCalculator();
+  const result = await calculator.calculate(negativePriorYear);
+  expect(Number.isFinite(result.fairValue)).toBe(true);
+  expect(result.assumptions.growthRate).toBeCloseTo(0.1);
+});
+
+test('excludes zero prior-year FCF from the growth rate calculation', async () => {
+  const zeroPriorYear: RawFinancials = {
+    ...financials,
+    freeCashFlowHistory: [0, 100, 110]
+  };
+  const calculator = new DcfFairValueCalculator();
+  const result = await calculator.calculate(zeroPriorYear);
+  expect(Number.isFinite(result.fairValue)).toBe(true);
+  expect(result.assumptions.growthRate).toBeCloseTo(0.1);
+});
+
+test('throws a clear error when every year-over-year comparison has a non-positive prior year', async () => {
+  const allNonPositive: RawFinancials = {
+    ...financials,
+    freeCashFlowHistory: [-100, -50, 0]
+  };
+  const calculator = new DcfFairValueCalculator();
+  await expect(calculator.calculate(allNonPositive)).rejects.toThrow(
+    /positive prior-year free cash flow/
+  );
 });

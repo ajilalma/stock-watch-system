@@ -13,9 +13,8 @@ const financials: RawFinancials = {
   bookValuePerShare: 10,
   earningsPerShare: 2,
   earningsGrowthRate: 10,
-  currentAssets: 500,
-  currentLiabilities: 250,
-  inventory: 100,
+  currentRatio: 2,
+  quickRatio: 1.6,
   dividendsPaidTTM: 50,
   netIncomeTTM: 200
 };
@@ -37,14 +36,15 @@ test('omits pegRatio when earningsGrowthRate is missing', () => {
   expect(result.pegRatio).toBeUndefined();
 });
 
-test('computes currentRatio as currentAssets / currentLiabilities', () => {
+test('passes through currentRatio from Yahoo-computed financials data', () => {
   const result = RatioService.compute(quote, financials);
-  expect(result.currentRatio).toBeCloseTo(2); // 500 / 250
+  expect(result.currentRatio).toBeCloseTo(2);
 });
 
-test('computes quickRatio as (currentAssets - inventory) / currentLiabilities', () => {
+test('passes through quickRatio from Yahoo-computed financials data, distinct from currentRatio', () => {
   const result = RatioService.compute(quote, financials);
-  expect(result.quickRatio).toBeCloseTo(1.6); // (500-100)/250
+  expect(result.quickRatio).toBeCloseTo(1.6);
+  expect(result.quickRatio).not.toBe(result.currentRatio);
 });
 
 test('computes payoutRatio as dividendsPaidTTM / netIncomeTTM when both available', () => {
