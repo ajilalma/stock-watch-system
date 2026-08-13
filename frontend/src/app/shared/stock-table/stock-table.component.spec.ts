@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { CommonModule } from '@angular/common';
 import { StockTableComponent } from './stock-table.component';
 import { MarginOfSafetyColorPipe } from '../pipes/margin-of-safety-color.pipe';
 import { PriceToBookColorPipe } from '../pipes/price-to-book-color.pipe';
@@ -19,6 +20,7 @@ describe('StockTableComponent', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
+      imports: [CommonModule],
       declarations: [
         StockTableComponent, MarginOfSafetyColorPipe, PriceToBookColorPipe,
         PegColorPipe, RatioColorPipe, PayoutRatioColorPipe
