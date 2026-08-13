@@ -20,6 +20,19 @@ export class StockTableComponent implements OnChanges {
   collapsedSectors = new Set<string>();
   refreshingSymbol: string | null = null;
 
+  // Safety-net timeout for refreshingSymbol: onRefreshClick is fire-and-forget
+  // from this component's perspective (the parent owns the API call), so if the
+  // parent's request errors out it never tells us - it only surfaces
+  // errorMessage and does NOT reload `tickers` on failure, which is the normal
+  // path that clears refreshingSymbol below. Without this, a failed refresh
+  // (e.g. rate-limited backend) would leave that row's refresh button stuck
+  // disabled/spinning forever. Set comfortably above the backend's own request
+  // timeout (StockApiService.REQUEST_TIMEOUT_MS = 45s) so it only ever fires
+  // as a last resort, after the API call would already have settled one way
+  // or another.
+  private static readonly REFRESH_SAFETY_TIMEOUT_MS = 46_000;
+  private refreshTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
+
   ngOnChanges(changes: SimpleChanges): void {
     if (!changes['tickers']) return;
     const currentSectors = new Set(this.tickers.map(t => t.sector));
@@ -28,6 +41,7 @@ export class StockTableComponent implements OnChanges {
         this.collapsedSectors.delete(sector);
       }
     }
+    this.clearRefreshTimeout();
     this.refreshingSymbol = null;
   }
 
@@ -67,7 +81,14 @@ export class StockTableComponent implements OnChanges {
   }
 
   onRefreshClick(symbol: string): void {
+    this.clearRefreshTimeout();
     this.refreshingSymbol = symbol;
+    this.refreshTimeoutHandle = setTimeout(() => {
+      this.refreshTimeoutHandle = null;
+      if (this.refreshingSymbol === symbol) {
+        this.refreshingSymbol = null;
+      }
+    }, StockTableComponent.REFRESH_SAFETY_TIMEOUT_MS);
     this.refreshOne.emit(symbol);
   }
 
@@ -77,5 +98,12 @@ export class StockTableComponent implements OnChanges {
 
   onRemoveClick(symbol: string): void {
     this.remove.emit(symbol);
+  }
+
+  private clearRefreshTimeout(): void {
+    if (this.refreshTimeoutHandle !== null) {
+      clearTimeout(this.refreshTimeoutHandle);
+      this.refreshTimeoutHandle = null;
+    }
   }
 }

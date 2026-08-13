@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { CommonModule } from '@angular/common';
 import { StockTableComponent } from './stock-table.component';
@@ -95,6 +96,43 @@ describe('StockTableComponent', () => {
     expect(component.refreshingSymbol).toBe('AAA');
     component.ngOnChanges({ tickers: {} as any });
     expect(component.refreshingSymbol).toBeNull();
+  });
+
+  it('safety-net timeout clears refreshingSymbol if it is never cleared via ngOnChanges (e.g. parent refresh errored)', () => {
+    vi.useFakeTimers();
+    try {
+      component.onRefreshClick('AAA');
+      expect(component.isRefreshing('AAA')).toBe(true);
+
+      vi.advanceTimersByTime(46_000);
+
+      expect(component.isRefreshing('AAA')).toBe(false);
+      expect(component.refreshingSymbol).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('refreshing a different symbol before the first one times out only leaves the new symbol refreshing, with no stray timeout firing', () => {
+    vi.useFakeTimers();
+    try {
+      component.onRefreshClick('AAA');
+      vi.advanceTimersByTime(1000);
+
+      component.onRefreshClick('BBB');
+      expect(component.isRefreshing('AAA')).toBe(false);
+      expect(component.isRefreshing('BBB')).toBe(true);
+
+      // Advance past when AAA's original timeout would have fired.
+      vi.advanceTimersByTime(45_000);
+      expect(component.isRefreshing('BBB')).toBe(true);
+
+      // Advance past BBB's own timeout.
+      vi.advanceTimersByTime(1000);
+      expect(component.isRefreshing('BBB')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('ngOnChanges prunes a collapsed sector once it no longer appears in tickers, leaving other collapsed sectors intact', () => {
