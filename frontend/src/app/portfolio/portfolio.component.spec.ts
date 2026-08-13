@@ -18,8 +18,6 @@ describe('PortfolioComponent', () => {
     addToPortfolio: ReturnType<typeof vi.fn>;
     removeFromPortfolio: ReturnType<typeof vi.fn>;
     refreshOne: ReturnType<typeof vi.fn>;
-    refreshMany: ReturnType<typeof vi.fn>;
-    refreshAll: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -28,8 +26,6 @@ describe('PortfolioComponent', () => {
       addToPortfolio: vi.fn(),
       removeFromPortfolio: vi.fn(),
       refreshOne: vi.fn(),
-      refreshMany: vi.fn(),
-      refreshAll: vi.fn(),
     };
     apiSpy.getPortfolio.mockReturnValue(of(sampleTickers));
 
@@ -48,6 +44,10 @@ describe('PortfolioComponent', () => {
     expect(component.tickers).toEqual(sampleTickers);
   });
 
+  it('isLoading is false once the initial load resolves', () => {
+    expect(component.isLoading).toBe(false);
+  });
+
   it('addTicker calls addToPortfolio and reloads the list', () => {
     apiSpy.addToPortfolio.mockReturnValue(of(sampleTickers[0]));
     component.newSymbol = 'MSFT';
@@ -63,11 +63,17 @@ describe('PortfolioComponent', () => {
     expect(apiSpy.getPortfolio).toHaveBeenCalledTimes(2);
   });
 
-  it('onRefreshAll calls refreshAll and reloads the list', () => {
-    apiSpy.refreshAll.mockReturnValue(of(sampleTickers));
-    component.onRefreshAll();
-    expect(apiSpy.refreshAll).toHaveBeenCalled();
+  it('onRefreshOne calls refreshOne with the given symbol and reloads the list', () => {
+    apiSpy.refreshOne.mockReturnValue(of(sampleTickers[0]));
+    component.onRefreshOne('AAPL');
+    expect(apiSpy.refreshOne).toHaveBeenCalledWith('AAPL');
     expect(apiSpy.getPortfolio).toHaveBeenCalledTimes(2);
+  });
+
+  it('onRefreshOne sets errorMessage when the refresh call fails', () => {
+    apiSpy.refreshOne.mockReturnValue(throwError(() => new Error('rate limited')));
+    component.onRefreshOne('AAPL');
+    expect(component.errorMessage).toContain('AAPL');
   });
 
   it('addTicker trims whitespace and uppercases the symbol before calling the API', () => {
