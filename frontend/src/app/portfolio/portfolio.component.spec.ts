@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { vi } from 'vitest';
 import { of } from 'rxjs';
 import { PortfolioComponent } from './portfolio.component';
@@ -34,7 +35,8 @@ describe('PortfolioComponent', () => {
 
     TestBed.configureTestingModule({
       declarations: [PortfolioComponent],
-      providers: [{ provide: StockApiService, useValue: apiSpy }]
+      providers: [{ provide: StockApiService, useValue: apiSpy }],
+      schemas: [NO_ERRORS_SCHEMA]
     });
     fixture = TestBed.createComponent(PortfolioComponent);
     component = fixture.componentInstance;

@@ -9,7 +9,8 @@ interface SectorGroup {
 @Component({
   selector: 'app-stock-table',
   templateUrl: './stock-table.component.html',
-  styleUrls: ['./stock-table.component.scss']
+  styleUrls: ['./stock-table.component.scss'],
+  standalone: false
 })
 export class StockTableComponent {
   @Input() tickers: Ticker[] = [];

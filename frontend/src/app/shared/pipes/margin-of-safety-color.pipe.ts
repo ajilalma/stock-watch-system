@@ -2,7 +2,7 @@ import { Pipe, PipeTransform } from '@angular/core';
 
 export type ColorLevel = 'green' | 'yellow' | 'red' | 'none';
 
-@Pipe({ name: 'marginOfSafetyColor' })
+@Pipe({ name: 'marginOfSafetyColor', standalone: false })
 export class MarginOfSafetyColorPipe implements PipeTransform {
   transform(currentPrice: number | undefined, fairValue: number | undefined): ColorLevel {
     if (currentPrice === undefined || fairValue === undefined || fairValue === 0) return 'none';

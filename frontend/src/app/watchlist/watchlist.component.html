@@ -1,0 +1,11 @@
+<h2>Watchlist</h2>
+<div class="add-ticker">
+  <input [(ngModel)]="newSymbol" placeholder="e.g. AAPL, RELIANCE.NS, SHOP.TO" />
+  <button (click)="addTicker()">Add</button>
+</div>
+<app-stock-table
+  [tickers]="tickers"
+  (refreshSelected)="onRefreshSelected($event)"
+  (refreshAllEmitter)="onRefreshAll()"
+  (remove)="onRemove($event)">
+</app-stock-table>

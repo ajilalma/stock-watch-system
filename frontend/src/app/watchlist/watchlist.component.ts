@@ -3,11 +3,11 @@ import { StockApiService } from '../shared/services/stock-api.service';
 import { Ticker } from '../shared/models/ticker.model';
 
 @Component({
-  selector: 'app-portfolio',
-  templateUrl: './portfolio.component.html',
+  selector: 'app-watchlist',
+  templateUrl: './watchlist.component.html',
   standalone: false
 })
-export class PortfolioComponent implements OnInit {
+export class WatchlistComponent implements OnInit {
   tickers: Ticker[] = [];
   newSymbol = '';
 
@@ -18,19 +18,19 @@ export class PortfolioComponent implements OnInit {
   }
 
   private load(): void {
-    this.api.getPortfolio().subscribe(tickers => this.tickers = tickers);
+    this.api.getWatchlist().subscribe(tickers => this.tickers = tickers);
   }
 
   addTicker(): void {
     if (!this.newSymbol) return;
-    this.api.addToPortfolio(this.newSymbol).subscribe(() => {
+    this.api.addToWatchlist(this.newSymbol).subscribe(() => {
       this.newSymbol = '';
       this.load();
     });
   }
 
   onRemove(symbol: string): void {
-    this.api.removeFromPortfolio(symbol).subscribe(() => this.load());
+    this.api.removeFromWatchlist(symbol).subscribe(() => this.load());
   }
 
   onRefreshSelected(symbols: string[]): void {

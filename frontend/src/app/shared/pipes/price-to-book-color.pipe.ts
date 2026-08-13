@@ -1,7 +1,7 @@
 import { Pipe, PipeTransform } from '@angular/core';
 import { ColorLevel } from './margin-of-safety-color.pipe';
 
-@Pipe({ name: 'priceToBookColor' })
+@Pipe({ name: 'priceToBookColor', standalone: false })
 export class PriceToBookColorPipe implements PipeTransform {
   transform(value: number | undefined): ColorLevel {
     if (value === undefined) return 'none';
