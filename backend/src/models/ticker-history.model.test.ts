@@ -18,22 +18,22 @@ afterEach(async () => {
   await TickerHistoryModel.deleteMany({});
 });
 
-test('stores a snapshot with its errors and the raw provider payload', async () => {
+test('stores a snapshot with its datapointErrors and the raw provider payload', async () => {
   await TickerHistoryModel.create({
     symbol: 'AAPL',
     archivedAt: new Date('2026-08-14T00:00:00Z'),
     data: { fetchedAt: new Date('2026-08-14T00:00:00Z'), currentPrice: 190, fairValue: 0 },
-    errors: { fairValue: 'No historic data available' },
+    datapointErrors: { fairValue: 'No historic data available' },
     stockRawData: { quoteSummary: { price: { regularMarketPrice: 190 } }, fundamentalsTimeSeries: [] }
   });
 
   const found = await TickerHistoryModel.findOne({ symbol: 'AAPL' });
   expect((found?.data as any).currentPrice).toBe(190);
-  expect((found?.errors as any).fairValue).toBe('No historic data available');
+  expect((found?.datapointErrors as any).fairValue).toBe('No historic data available');
   expect((found?.stockRawData as any).quoteSummary.price.regularMarketPrice).toBe(190);
 });
 
-test('accepts snapshots without errors or raw data, so pre-existing history still reads', async () => {
+test('accepts snapshots without datapointErrors or raw data, so pre-existing history still reads', async () => {
   await TickerHistoryModel.create({
     symbol: 'MSFT',
     archivedAt: new Date('2026-01-01T00:00:00Z'),
@@ -41,7 +41,7 @@ test('accepts snapshots without errors or raw data, so pre-existing history stil
   });
 
   const found = await TickerHistoryModel.findOne({ symbol: 'MSFT' });
-  expect(found?.errors).toBeUndefined();
+  expect(found?.datapointErrors).toBeUndefined();
   expect(found?.stockRawData).toBeUndefined();
 });
 

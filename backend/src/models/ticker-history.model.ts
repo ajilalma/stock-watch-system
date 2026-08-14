@@ -1,11 +1,11 @@
 import { Schema, model, Document } from 'mongoose';
 import { CachedData } from './ticker.model';
 
-export interface TickerHistoryDocument extends Omit<Document, 'errors'> {
+export interface TickerHistoryDocument extends Document {
   symbol: string;
   archivedAt: Date;
   data: CachedData;
-  errors?: Record<string, string>;
+  datapointErrors?: Record<string, string>;
   // The unprocessed provider response for this fetch. Lives only here, never
   // on the ticker document, which keeps the tickers collection light for the
   // UI and makes its absence from API responses structural.
@@ -19,7 +19,7 @@ const tickerHistorySchema = new Schema<TickerHistoryDocument>({
   symbol: { type: String, required: true },
   archivedAt: { type: Date, required: true },
   data: { type: Schema.Types.Mixed, required: true },
-  errors: { type: Schema.Types.Mixed },
+  datapointErrors: { type: Schema.Types.Mixed },
   stockRawData: { type: Schema.Types.Mixed }
 });
 

@@ -19,7 +19,7 @@ export interface CachedData {
   payoutRatio?: number;
 }
 
-export interface TickerDocument extends Omit<Document, 'errors'> {
+export interface TickerDocument extends Document {
   symbol: string;
   companyName: string;
   sector: string;
@@ -29,9 +29,9 @@ export interface TickerDocument extends Omit<Document, 'errors'> {
   lists: ('portfolio' | 'watchlist')[];
   cachedData?: CachedData;
   // Per-datapoint failure reasons, keyed by cachedData field name (e.g.
-  // errors.fairValue). Replaced wholesale on every fetch rather than merged,
+  // datapointErrors.fairValue). Replaced wholesale on every fetch rather than merged,
   // so a datapoint that starts working again stops reporting an error.
-  errors?: Map<string, string>;
+  datapointErrors?: Map<string, string>;
 }
 
 const cachedDataSchema = new Schema<CachedData>({
@@ -69,7 +69,7 @@ const tickerSchema = new Schema<TickerDocument>({
   // A Map rather than a fixed sub-schema so adding a datapoint later needs no
   // schema change. Mongoose serializes Maps to plain objects in JSON, so API
   // consumers see an ordinary object.
-  errors: { type: Map, of: String, default: {} }
+  datapointErrors: { type: Map, of: String, default: {} }
 });
 
 export const TickerModel = model<TickerDocument>('Ticker', tickerSchema);
