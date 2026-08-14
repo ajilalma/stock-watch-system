@@ -4,7 +4,7 @@
 
 **Goal:** Isolate every derived stock datapoint into its own non-throwing function so a single failed calculation records an error instead of blocking the whole ticker, and archive the raw provider payload to history for debugging.
 
-**Architecture:** A new `datapoint-calculators.ts` module holds one small function per datapoint, each returning `{ value, error? }` and never throwing. `TickerService` becomes pure orchestration: call the provider once, call each calculator independently, assemble `cachedData` plus an `errors` map, write the ticker, then append a history snapshot carrying the raw provider response. The two Yahoo providers collapse to one (v4), with a single `getStockData()` entry point that returns quote, financials, and raw payload together.
+**Architecture:** A new `datapoint-calculators.ts` module holds one small function per datapoint, each returning `{ value, error? }` and never throwing. `TickerService` becomes pure orchestration: call the provider once, call each calculator independently, assemble `cachedData` plus an `datapointErrors` map, write the ticker, then append a history snapshot carrying the raw provider response. The two Yahoo providers collapse to one (v4), with a single `getStockData()` entry point that returns quote, financials, and raw payload together.
 
 **Tech Stack:** TypeScript, Node, Express, Mongoose 8, Jest + ts-jest, mongodb-memory-server, supertest, yahoo-finance2 v4.
 
@@ -37,13 +37,13 @@
 - `backend/src/types/domain.ts` — `RawQuote` metadata fields become optional; `RatioResult` deleted.
 - `backend/src/providers/stock-data-provider.interface.ts` — single `getStockData()` method plus a `StockData` type.
 - `backend/src/providers/yahoo-finance-v4.provider.ts` — implement `getStockData()`, return the raw payload, drop the summary de-dupe cache and the metadata `'Unknown'` defaults.
-- `backend/src/models/ticker.model.ts` — add `errors`, drop `fairValueError`.
-- `backend/src/models/ticker-history.model.ts` — mixed `data`, add `errors` and `stockRawData`, add compound index.
+- `backend/src/models/ticker.model.ts` — add `datapointErrors`, drop `fairValueError`.
+- `backend/src/models/ticker-history.model.ts` — mixed `data`, add `datapointErrors` and `stockRawData`, add compound index.
 - `backend/src/services/ticker.service.ts` — orchestration, history-on-every-write, `toTickerResponse`.
 - `backend/src/routes/{portfolio,watchlist,tickers}.routes.ts` — return mapped responses.
 - `backend/src/server.ts` — construct the v4 provider directly.
 - `backend/package.json` — drop the `yahoo-finance2` v2 dependency.
-- `frontend/src/app/shared/models/ticker.model.ts` — add `errors`, drop `fairValueError`.
+- `frontend/src/app/shared/models/ticker.model.ts` — add `datapointErrors`, drop `fairValueError`.
 - `TODO.md` — update stale items.
 
 ---
@@ -1024,7 +1024,7 @@ Note: this commit leaves the build broken by design (the compiler catches it in 
 
 ## Task 3: Model changes
 
-Adds the `errors` field and reshapes the history document to carry errors and the raw payload.
+Adds the `datapointErrors` field and reshapes the history document to carry errors and the raw payload.
 
 **Files:**
 - Modify: `backend/src/models/ticker.model.ts`
@@ -1032,14 +1032,14 @@ Adds the `errors` field and reshapes the history document to carry errors and th
 - Modify: `backend/src/models/ticker.model.test.ts`
 
 **Interfaces:**
-- Produces: `TickerDocument.errors?: Map<string, string>` on `models/ticker.model.ts`; `CachedData` without `fairValueError`; `TickerHistoryDocument { symbol, archivedAt, data, errors?, stockRawData? }` on `models/ticker-history.model.ts`. Tasks 4 and 5 depend on both.
+- Produces: `TickerDocument.datapointErrors?: Map<string, string>` on `models/ticker.model.ts`; `CachedData` without `fairValueError`; `TickerHistoryDocument { symbol, archivedAt, data, datapointErrors?, stockRawData? }` on `models/ticker-history.model.ts`. Tasks 4 and 5 depend on both.
 
 - [ ] **Step 1: Write the failing test**
 
 Append to `backend/src/models/ticker.model.test.ts`:
 
 ```ts
-test('stores an errors map keyed by datapoint field name', async () => {
+test('stores a datapointErrors map keyed by datapoint field name', async () => {
   await TickerModel.create({
     symbol: 'BROKEN',
     companyName: 'Broken Co',
@@ -1048,14 +1048,14 @@ test('stores an errors map keyed by datapoint field name', async () => {
     country: 'US',
     nativeCurrency: 'USD',
     lists: ['watchlist'],
-    errors: { fairValue: 'No historic data available' }
+    datapointErrors: { fairValue: 'No historic data available' }
   });
 
   const found = await TickerModel.findOne({ symbol: 'BROKEN' });
-  expect(found?.errors?.get('fairValue')).toBe('No historic data available');
+  expect(found?.datapointErrors?.get('fairValue')).toBe('No historic data available');
 });
 
-test('serializes the errors map to a plain object in JSON', async () => {
+test('serializes the datapointErrors map to a plain object in JSON', async () => {
   await TickerModel.create({
     symbol: 'BROKEN2',
     companyName: 'Broken Co 2',
@@ -1064,11 +1064,11 @@ test('serializes the errors map to a plain object in JSON', async () => {
     country: 'US',
     nativeCurrency: 'USD',
     lists: ['watchlist'],
-    errors: { fairValue: 'No historic data available' }
+    datapointErrors: { fairValue: 'No historic data available' }
   });
 
   const found = await TickerModel.findOne({ symbol: 'BROKEN2' });
-  expect(JSON.parse(JSON.stringify(found)).errors).toEqual({ fairValue: 'No historic data available' });
+  expect(JSON.parse(JSON.stringify(found)).datapointErrors).toEqual({ fairValue: 'No historic data available' });
 });
 ```
 
@@ -1095,22 +1095,22 @@ afterEach(async () => {
   await TickerHistoryModel.deleteMany({});
 });
 
-test('stores a snapshot with its errors and the raw provider payload', async () => {
+test('stores a snapshot with its datapointErrors and the raw provider payload', async () => {
   await TickerHistoryModel.create({
     symbol: 'AAPL',
     archivedAt: new Date('2026-08-14T00:00:00Z'),
     data: { fetchedAt: new Date('2026-08-14T00:00:00Z'), currentPrice: 190, fairValue: 0 },
-    errors: { fairValue: 'No historic data available' },
+    datapointErrors: { fairValue: 'No historic data available' },
     stockRawData: { quoteSummary: { price: { regularMarketPrice: 190 } }, fundamentalsTimeSeries: [] }
   });
 
   const found = await TickerHistoryModel.findOne({ symbol: 'AAPL' });
   expect((found?.data as any).currentPrice).toBe(190);
-  expect((found?.errors as any).fairValue).toBe('No historic data available');
+  expect((found?.datapointErrors as any).fairValue).toBe('No historic data available');
   expect((found?.stockRawData as any).quoteSummary.price.regularMarketPrice).toBe(190);
 });
 
-test('accepts snapshots without errors or raw data, so pre-existing history still reads', async () => {
+test('accepts snapshots without datapointErrors or raw data, so pre-existing history still reads', async () => {
   await TickerHistoryModel.create({
     symbol: 'MSFT',
     archivedAt: new Date('2026-01-01T00:00:00Z'),
@@ -1118,7 +1118,7 @@ test('accepts snapshots without errors or raw data, so pre-existing history stil
   });
 
   const found = await TickerHistoryModel.findOne({ symbol: 'MSFT' });
-  expect(found?.errors).toBeUndefined();
+  expect(found?.datapointErrors).toBeUndefined();
   expect(found?.stockRawData).toBeUndefined();
 });
 
@@ -1147,9 +1147,9 @@ test('indexes symbol with archivedAt descending for per-symbol time-series reads
 npx jest src/models/
 ```
 
-Expected: FAIL — `found?.errors` is undefined on the ticker test, and the history model rejects `errors`/`stockRawData` as unknown paths.
+Expected: FAIL — `found?.datapointErrors` is undefined on the ticker test, and the history model rejects `datapointErrors`/`stockRawData` as unknown paths.
 
-- [ ] **Step 3: Add errors to the ticker model**
+- [ ] **Step 3: Add datapointErrors to the ticker model**
 
 In `backend/src/models/ticker.model.ts`:
 
@@ -1159,9 +1159,9 @@ Add to the `TickerDocument` interface, after `cachedData`:
 
 ```ts
   // Per-datapoint failure reasons, keyed by cachedData field name (e.g.
-  // errors.fairValue). Replaced wholesale on every fetch rather than merged,
+  // datapointErrors.fairValue). Replaced wholesale on every fetch rather than merged,
   // so a datapoint that starts working again stops reporting an error.
-  errors?: Map<string, string>;
+  datapointErrors?: Map<string, string>;
 ```
 
 Add to `tickerSchema`, after `cachedData`:
@@ -1170,7 +1170,7 @@ Add to `tickerSchema`, after `cachedData`:
   // A Map rather than a fixed sub-schema so adding a datapoint later needs no
   // schema change. Mongoose serializes Maps to plain objects in JSON, so API
   // consumers see an ordinary object.
-  errors: { type: Map, of: String, default: {} }
+  datapointErrors: { type: Map, of: String, default: {} }
 ```
 
 - [ ] **Step 4: Rewrite the history model**
@@ -1185,7 +1185,7 @@ export interface TickerHistoryDocument extends Document {
   symbol: string;
   archivedAt: Date;
   data: CachedData;
-  errors?: Record<string, string>;
+  datapointErrors?: Record<string, string>;
   // The unprocessed provider response for this fetch. Lives only here, never
   // on the ticker document, which keeps the tickers collection light for the
   // UI and makes its absence from API responses structural.
@@ -1199,7 +1199,7 @@ const tickerHistorySchema = new Schema<TickerHistoryDocument>({
   symbol: { type: String, required: true },
   archivedAt: { type: Date, required: true },
   data: { type: Schema.Types.Mixed, required: true },
-  errors: { type: Schema.Types.Mixed },
+  datapointErrors: { type: Schema.Types.Mixed },
   stockRawData: { type: Schema.Types.Mixed }
 });
 
@@ -1228,10 +1228,10 @@ green build.
 
 ```bash
 git add -A
-git commit -m "feat: add errors map to tickers, raw payload to history
+git commit -m "feat: add datapointErrors map to tickers, raw payload to history
 
-errors is a Mongoose Map keyed by datapoint field name, replacing the single
-cachedData.fairValueError. History documents gain errors and stockRawData,
+datapointErrors is a Mongoose Map keyed by datapoint field name, replacing the single
+cachedData.fairValueError. History documents gain datapointErrors and stockRawData,
 their data field becomes Mixed so it needn't track CachedData, and the
 collection gains a {symbol, archivedAt} index for time-series reads."
 ```
@@ -1247,8 +1247,8 @@ Turns `fetchCachedData` into pure orchestration and makes every write to `ticker
 - Modify: `backend/src/services/ticker.service.test.ts`
 
 **Interfaces:**
-- Consumes: `getStockData`/`StockData` (Task 1); every `compute*` function and `collectErrors` (Task 2); `TickerDocument.errors` and the new `TickerHistoryDocument` (Task 3).
-- Produces: `TickerService.fetchStockData()` private method returning `{ symbol, companyName, sector, exchange, country, nativeCurrency, cachedData, errors, raw }`. Task 5 depends on `TickerDocument.errors` being populated.
+- Consumes: `getStockData`/`StockData` (Task 1); every `compute*` function and `collectErrors` (Task 2); `TickerDocument.datapointErrors` and the new `TickerHistoryDocument` (Task 3).
+- Produces: `TickerService.fetchStockData()` private method returning `{ symbol, companyName, sector, exchange, country, nativeCurrency, cachedData, datapointErrors, raw }`. Task 5 depends on `TickerDocument.datapointErrors` being populated.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1283,7 +1283,7 @@ test('a failed datapoint records an error and leaves every other datapoint intac
 
   expect(ticker.cachedData?.fairValue).toBe(0);
   expect(ticker.cachedData?.nativeFairValue).toBe(0);
-  expect(ticker.errors?.get('fairValue')).toBe(
+  expect(ticker.datapointErrors?.get('fairValue')).toBe(
     'At least one valid year-over-year comparison with a positive prior-year free cash flow is required for a DCF calculation'
   );
   expect(ticker.cachedData?.currentPrice).toBe(100);
@@ -1304,28 +1304,28 @@ test('two independent failures each record their own error without affecting the
   const service = new TickerService(brokenProvider, fakeCalculator, fakeConverter);
   const ticker = await service.addTicker('AAPL', 'portfolio');
 
-  expect(Object.keys(Object.fromEntries(ticker.errors!)).sort()).toEqual(['priceToBook', 'quickRatio']);
+  expect(Object.keys(Object.fromEntries(ticker.datapointErrors!)).sort()).toEqual(['priceToBook', 'quickRatio']);
   expect(ticker.cachedData?.priceToBook).toBe(0);
   expect(ticker.cachedData?.quickRatio).toBe(0);
   expect(ticker.cachedData?.fairValue).toBe(120);
   expect(ticker.cachedData?.currentRatio).toBe(2);
 });
 
-test('a successful fetch stores an empty errors object', async () => {
+test('a successful fetch stores an empty datapointErrors object', async () => {
   const service = new TickerService(fakeProvider, fakeCalculator, fakeConverter);
   const ticker = await service.addTicker('AAPL', 'portfolio');
-  expect(Object.fromEntries(ticker.errors!)).toEqual({});
+  expect(Object.fromEntries(ticker.datapointErrors!)).toEqual({});
 });
 
-test('a refresh replaces the errors object rather than merging, so recovered datapoints clear', async () => {
+test('a refresh replaces the datapointErrors object rather than merging, so recovered datapoints clear', async () => {
   const service = new TickerService(fakeProvider, failingCalculator, fakeConverter);
   const ticker = await service.addTicker('AAPL', 'portfolio');
-  expect(ticker.errors?.get('fairValue')).toBeDefined();
+  expect(ticker.datapointErrors?.get('fairValue')).toBeDefined();
 
   const recoveredService = new TickerService(fakeProvider, fakeCalculator, fakeConverter);
   const refreshed = await recoveredService.refreshTicker('AAPL');
 
-  expect(refreshed.errors?.get('fairValue')).toBeUndefined();
+  expect(refreshed.datapointErrors?.get('fairValue')).toBeUndefined();
   expect(refreshed.cachedData?.fairValue).toBe(120);
 });
 
@@ -1336,7 +1336,7 @@ test('a failed FX lookup falls back to rate 1 so prices stay in native currency,
   expect(ticker.cachedData?.fxRateToUsd).toBe(1);
   expect(ticker.cachedData?.currentPrice).toBe(100);
   expect(ticker.cachedData?.nativeFairValue).toBe(120);
-  expect(ticker.errors?.get('fxRateToUsd')).toBe('Frankfurter unreachable');
+  expect(ticker.datapointErrors?.get('fxRateToUsd')).toBe('Frankfurter unreachable');
 });
 
 test('addTicker writes one history snapshot carrying the raw provider payload', async () => {
@@ -1359,12 +1359,12 @@ test('each refresh appends another history snapshot rather than replacing one', 
   expect(await TickerHistoryModel.countDocuments({ symbol: 'AAPL' })).toBe(4);
 });
 
-test('a history snapshot records the errors from its own fetch', async () => {
+test('a history snapshot records the datapointErrors from its own fetch', async () => {
   const service = new TickerService(fakeProvider, failingCalculator, fakeConverter);
   await service.addTicker('AAPL', 'portfolio');
 
   const history = await TickerHistoryModel.findOne({ symbol: 'AAPL' });
-  expect((history?.errors as any).fairValue).toBeTruthy();
+  expect((history?.datapointErrors as any).fairValue).toBeTruthy();
 });
 
 test('a history write failure is logged but does not fail the add', async () => {
@@ -1397,7 +1397,7 @@ test('a provider failure still aborts the add entirely and writes nothing', asyn
 npx jest src/services/ticker.service.test.ts
 ```
 
-Expected: FAIL — compilation errors from the missing `./ratio.service` import, plus `ticker.errors` undefined.
+Expected: FAIL — compilation errors from the missing `./ratio.service` import, plus `ticker.datapointErrors` undefined.
 
 - [ ] **Step 3: Rewrite the service's fetch and write paths**
 
@@ -1441,7 +1441,7 @@ interface FetchedStock {
   country: string;
   nativeCurrency: string;
   cachedData: CachedData;
-  errors: Record<string, string>;
+  datapointErrors: Record<string, string>;
   raw: unknown;
 }
 ```
@@ -1509,7 +1509,7 @@ Replace the entire `fetchCachedData` method with:
       country: country.value,
       nativeCurrency: quote.currency,
       cachedData,
-      errors,
+      datapointErrors,
       raw
     };
   }
@@ -1525,7 +1525,7 @@ Replace the entire `fetchCachedData` method with:
         symbol,
         archivedAt: fetched.cachedData.fetchedAt,
         data: fetched.cachedData,
-        errors: fetched.errors,
+        errors: fetched.datapointErrors,
         stockRawData: fetched.raw
       });
       logger.info(SCOPE, `archiveSnapshot(${symbol}) - snapshot written`, { symbol, archivedAt: fetched.cachedData.fetchedAt });
@@ -1537,7 +1537,7 @@ Replace the entire `fetchCachedData` method with:
   }
 ```
 
-- [ ] **Step 4: Update addTicker to write errors and archive**
+- [ ] **Step 4: Update addTicker to write datapointErrors and archive**
 
 In `addTicker`, replace the destructuring and creation block:
 
@@ -1563,7 +1563,7 @@ with:
     const created = await TickerModel.create({
       symbol: fetched.symbol, companyName: fetched.companyName, sector: fetched.sector,
       exchange: fetched.exchange, country: fetched.country, nativeCurrency: fetched.nativeCurrency,
-      lists: [list], cachedData: fetched.cachedData, errors: fetched.errors
+      lists: [list], cachedData: fetched.cachedData, errors: fetched.datapointErrors
     });
     logger.info(SCOPE, `addTicker(${normalizedSymbol}, ${list}) - saved new document to MongoDB`, { symbol: fetched.symbol, id: String(created._id) });
 
@@ -1599,9 +1599,9 @@ with:
     ticker.cachedData = fetched.cachedData;
     // Assigned wholesale rather than merged, so a datapoint that recovered
     // since the last fetch drops its stale error.
-    ticker.errors = new Map(Object.entries(fetched.errors));
+    ticker.datapointErrors = new Map(Object.entries(fetched.datapointErrors));
     await ticker.save();
-    logger.info(SCOPE, `refreshTicker(${symbol}) - saved refreshed data to MongoDB`, { symbol, fetchedAt: fetched.cachedData.fetchedAt, errorFields: Object.keys(fetched.errors) });
+    logger.info(SCOPE, `refreshTicker(${symbol}) - saved refreshed data to MongoDB`, { symbol, fetchedAt: fetched.cachedData.fetchedAt, errorFields: Object.keys(fetched.datapointErrors) });
 
     await this.archiveSnapshot(symbol, fetched);
     return ticker;
@@ -1613,7 +1613,7 @@ with:
 npx jest src/services/ticker.service.test.ts
 ```
 
-Expected: PASS. If `ticker.errors?.get(...)` is undefined right after `TickerModel.create`, the Map is being set from a plain object — confirm the schema uses `{ type: Map, of: String }` from Task 3.
+Expected: PASS. If `ticker.datapointErrors?.get(...)` is undefined right after `TickerModel.create`, the Map is being set from a plain object — confirm the schema uses `{ type: Map, of: String }` from Task 3.
 
 - [ ] **Step 7: Type check**
 
@@ -1638,18 +1638,18 @@ git add -A
 git commit -m "feat: isolate datapoint failures in TickerService
 
 fetchStockData now calls each calculator independently and assembles an
-errors map alongside cachedData, so one underivable datapoint no longer
+datapointErrors map alongside cachedData, so one underivable datapoint no longer
 blocks tracking a stock. History inverts: instead of archiving the previous
 snapshot before a refresh, every add and refresh appends the snapshot it just
-wrote, carrying that fetch's errors and raw provider payload. A failed
+wrote, carrying that fetch's datapointErrors and raw provider payload. A failed
 archive is logged, not propagated."
 ```
 
 ---
 
-## Task 5: Return errors from the API
+## Task 5: Return datapointErrors from the API
 
-Adds an explicit response mapper so `errors` is returned and nothing unintended leaks.
+Adds an explicit response mapper so `datapointErrors` is returned and nothing unintended leaks.
 
 **Files:**
 - Modify: `backend/src/services/ticker.service.ts`
@@ -1659,7 +1659,7 @@ Adds an explicit response mapper so `errors` is returned and nothing unintended 
 - Modify: `backend/src/app.test.ts`
 
 **Interfaces:**
-- Consumes: `TickerDocument` with `errors` (Task 3).
+- Consumes: `TickerDocument` with `datapointErrors` (Task 3).
 - Produces: `TickerResponse` interface and `toTickerResponse(doc: TickerDocument): TickerResponse`, both exported from `services/ticker.service.ts`.
 
 - [ ] **Step 1: Write the failing test**
@@ -1678,37 +1678,37 @@ function makeTickerDoc(overrides: any = {}): any {
     nativeCurrency: 'USD',
     lists: ['portfolio'],
     cachedData: { fetchedAt: new Date('2026-08-14T00:00:00Z'), currentPrice: 190, fairValue: 0 },
-    errors: new Map([['fairValue', 'No historic data available']]),
+    datapointErrors: new Map([['fairValue', 'No historic data available']]),
     ...overrides
   };
 }
 
-test('GET /api/portfolio returns the errors object so the UI can explain missing datapoints', async () => {
+test('GET /api/portfolio returns the datapointErrors object so the UI can explain missing datapoints', async () => {
   const service = makeFakeService();
   service.getList.mockImplementation(async () => [makeTickerDoc()]);
   const app = createApp(service);
 
   const res = await request(app).get('/api/portfolio');
   expect(res.status).toBe(200);
-  expect(res.body[0].errors).toEqual({ fairValue: 'No historic data available' });
+  expect(res.body[0].datapointErrors).toEqual({ fairValue: 'No historic data available' });
 });
 
-test('POST /api/tickers/:symbol/refresh returns the errors object', async () => {
+test('POST /api/tickers/:symbol/refresh returns the datapointErrors object', async () => {
   const service = makeFakeService();
   service.refreshTicker.mockImplementation(async () => makeTickerDoc());
   const app = createApp(service);
 
   const res = await request(app).post('/api/tickers/AAPL/refresh');
-  expect(res.body.errors).toEqual({ fairValue: 'No historic data available' });
+  expect(res.body.datapointErrors).toEqual({ fairValue: 'No historic data available' });
 });
 
-test('POST /api/portfolio/:symbol returns the errors object', async () => {
+test('POST /api/portfolio/:symbol returns the datapointErrors object', async () => {
   const service = makeFakeService();
   service.addTicker.mockImplementation(async () => makeTickerDoc());
   const app = createApp(service);
 
   const res = await request(app).post('/api/portfolio/AAPL');
-  expect(res.body.errors).toEqual({ fairValue: 'No historic data available' });
+  expect(res.body.datapointErrors).toEqual({ fairValue: 'No historic data available' });
 });
 
 test('responses never include stockRawData, however the document was populated', async () => {
@@ -1721,13 +1721,13 @@ test('responses never include stockRawData, however the document was populated',
   expect(JSON.stringify(res.body)).not.toContain('secret');
 });
 
-test('a ticker with no failures returns an empty errors object rather than omitting it', async () => {
+test('a ticker with no failures returns an empty datapointErrors object rather than omitting it', async () => {
   const service = makeFakeService();
-  service.getList.mockImplementation(async () => [makeTickerDoc({ errors: new Map() })]);
+  service.getList.mockImplementation(async () => [makeTickerDoc({ datapointErrors: new Map() })]);
   const app = createApp(service);
 
   const res = await request(app).get('/api/portfolio');
-  expect(res.body[0].errors).toEqual({});
+  expect(res.body[0].datapointErrors).toEqual({});
 });
 ```
 
@@ -1737,7 +1737,7 @@ test('a ticker with no failures returns an empty errors object rather than omitt
 npx jest src/app.test.ts
 ```
 
-Expected: FAIL — `errors` comes back as `{}` or absent (a `Map` does not survive `JSON.stringify` on a plain object), and `stockRawData` leaks through.
+Expected: FAIL — `datapointErrors` comes back as `{}` or absent (a `Map` does not survive `JSON.stringify` on a plain object), and `stockRawData` leaks through.
 
 - [ ] **Step 3: Add the response mapper**
 
@@ -1754,7 +1754,7 @@ export interface TickerResponse {
   nativeCurrency: string;
   lists: ('portfolio' | 'watchlist')[];
   cachedData?: CachedData;
-  errors: Record<string, string>;
+  datapointErrors: Record<string, string>;
 }
 
 // Builds the API shape explicitly instead of serializing the Mongoose
@@ -1762,9 +1762,9 @@ export interface TickerResponse {
 // the schema. stockRawData lives only on history documents and so cannot
 // appear here, but an explicit allowlist keeps that true as fields are added.
 export function toTickerResponse(doc: TickerDocument): TickerResponse {
-  const errors = doc.errors instanceof Map
-    ? Object.fromEntries(doc.errors)
-    : ((doc.errors ?? {}) as Record<string, string>);
+  const errors = doc.datapointErrors instanceof Map
+    ? Object.fromEntries(doc.datapointErrors)
+    : ((doc.datapointErrors ?? {}) as Record<string, string>);
 
   const response: TickerResponse = {
     _id: String(doc._id),
@@ -1776,7 +1776,7 @@ export function toTickerResponse(doc: TickerDocument): TickerResponse {
     nativeCurrency: doc.nativeCurrency,
     lists: doc.lists,
     cachedData: doc.cachedData,
-    errors
+    datapointErrors
   };
 
   // Drop keys the document did not carry, so partially-populated documents
@@ -1829,7 +1829,7 @@ Expected: PASS.
 
 ```bash
 git add -A
-git commit -m "feat: return the errors object from the ticker APIs
+git commit -m "feat: return the datapointErrors object from the ticker APIs
 
 Routes now map documents through toTickerResponse rather than serializing the
 Mongoose document, so the response shape is explicit and stockRawData cannot
@@ -1848,7 +1848,7 @@ Brings the frontend type in line and clears the stale TODO entries.
 
 **Interfaces:**
 - Consumes: the API shape from Task 5.
-- Produces: `Ticker.errors?: Record<string, string>` for the follow-up UI work.
+- Produces: `Ticker.datapointErrors?: Record<string, string>` for the follow-up UI work.
 
 - [ ] **Step 1: Update the frontend model**
 
@@ -1856,10 +1856,10 @@ In `frontend/src/app/shared/models/ticker.model.ts`, delete `fairValueError?: st
 
 ```ts
   // Per-datapoint failure reasons keyed by cachedData field name (e.g.
-  // errors['fairValue']). A datapoint with an entry here fell back to a
+  // datapointErrors['fairValue']). A datapoint with an entry here fell back to a
   // default value - 0 for numbers, 'Unavailable' for strings - so the value
   // shown is not real and should be presented as missing.
-  errors?: Record<string, string>;
+  datapointErrors?: Record<string, string>;
 }
 ```
 
@@ -1882,7 +1882,7 @@ From the repository root, replace the first bullet in `TODO.md`:
 with:
 
 ```
-- Surface the `errors` object in the UI. Any datapoint with an entry in `Ticker.errors` (keyed by `cachedData` field name) fell back to a default — 0 for numbers, "Unavailable" for strings — so the displayed value is not real. `StockTableComponent` needs a way to show this per cell (e.g. a tooltip/title carrying the error text, plus a warning marker) so a fabricated 0 is never mistaken for a real figure. The field is returned by the list and detail APIs and exists on `Ticker` in both backend (`backend/src/models/ticker.model.ts`) and frontend (`frontend/src/app/shared/models/ticker.model.ts`).
+- Surface the `datapointErrors` object in the UI. Any datapoint with an entry in `Ticker.errors` (keyed by `cachedData` field name) fell back to a default — 0 for numbers, "Unavailable" for strings — so the displayed value is not real. `StockTableComponent` needs a way to show this per cell (e.g. a tooltip/title carrying the error text, plus a warning marker) so a fabricated 0 is never mistaken for a real figure. The field is returned by the list and detail APIs and exists on `Ticker` in both backend (`backend/src/models/ticker.model.ts`) and frontend (`frontend/src/app/shared/models/ticker.model.ts`).
 ```
 
 Replace the second bullet (the `YahooFinanceV4Provider` verification item) with:
@@ -1905,9 +1905,9 @@ Expected: PASS, every test.
 
 ```bash
 git add -A
-git commit -m "chore: align frontend Ticker model with the errors object
+git commit -m "chore: align frontend Ticker model with the datapointErrors object
 
-Replaces fairValueError with the generalized errors map and updates TODO.md:
+Replaces fairValueError with the generalized datapointErrors map and updates TODO.md:
 the UI item now covers every datapoint, and the dead v2-provider item is
 removed."
 ```
@@ -1930,7 +1930,7 @@ cd backend && npm run dev
 curl -s -X POST http://localhost:3000/api/watchlist/AAPL | python3 -m json.tool
 ```
 
-Expected: 201 with populated `cachedData` and `"errors": {}` (or a small number of entries if Yahoo omits something for AAPL). No `stockRawData` key anywhere in the output.
+Expected: 201 with populated `cachedData` and `"datapointErrors": {}` (or a small number of entries if Yahoo omits something for AAPL). No `stockRawData` key anywhere in the output.
 
 - [ ] **Step 3: Add a symbol likely to fail a datapoint**
 
@@ -1940,17 +1940,17 @@ Pick a recently-listed or loss-making company (the DCF needs a positive prior-ye
 curl -s -X POST http://localhost:3000/api/watchlist/RIVN | python3 -m json.tool
 ```
 
-Expected: 201, not an error. `cachedData.fairValue` is `0` and `errors.fairValue` explains why. Other datapoints are still populated. This is the whole point of the change — before it, this call could fail outright.
+Expected: 201, not an error. `cachedData.fairValue` is `0` and `datapointErrors.fairValue` explains why. Other datapoints are still populated. This is the whole point of the change — before it, this call could fail outright.
 
 - [ ] **Step 4: Confirm the raw payload reached history**
 
 ```bash
-mongosh --quiet --eval 'db.tickerhistories.find({symbol:"RIVN"}, {symbol:1, archivedAt:1, errors:1, "stockRawData.quoteSummary.price.regularMarketPrice":1}).pretty()' value-investing
+mongosh --quiet --eval 'db.tickerhistories.find({symbol:"RIVN"}, {symbol:1, archivedAt:1, datapointErrors:1, "stockRawData.quoteSummary.price.regularMarketPrice":1}).pretty()' value-investing
 ```
 
 (Substitute the database name from `backend/.env` `MONGO_URI` if it differs.)
 
-Expected: one document, with `errors` matching the API response and a real price under `stockRawData`.
+Expected: one document, with `datapointErrors` matching the API response and a real price under `stockRawData`.
 
 - [ ] **Step 5: Refresh twice and confirm snapshots append**
 
@@ -1980,14 +1980,14 @@ Expected: no `stockRawData` field on the document.
 | --- | --- |
 | 1. Provider consolidation | Task 1 |
 | 2. Isolated datapoint calculators | Task 2 |
-| 3. The `errors` object | Task 3 (schema), Task 4 (population) |
+| 3. The `datapointErrors` object | Task 3 (schema), Task 4 (population) |
 | 4. History and raw data | Task 3 (schema, index), Task 4 (write path) |
 | 5. API responses | Task 5 |
 | 6. Flow | Task 4 |
 | Testing | Tasks 1–5, each behind its own TDD cycle |
-| Migration | No code — verified by the history model test accepting snapshots without `errors`/`stockRawData`, and by `errors` being optional on the ticker schema |
+| Migration | No code — verified by the history model test accepting snapshots without `datapointErrors`/`stockRawData`, and by `datapointErrors` being optional on the ticker schema |
 | Files (deleted/added/modified) | All accounted for across Tasks 1–6 |
 
 One deliberate deviation from the spec, amended in the spec itself before Task 1: optional-by-design datapoints return `undefined`, not `0`.
 
-**Type consistency:** `Calculated<T>`, `UNAVAILABLE`, and all eleven `compute*` names plus `collectErrors` are defined in Task 2 and consumed under exactly those names in Task 4. `StockData`/`getStockData` are defined in Task 1 and consumed in Tasks 1 and 4. `TickerResponse`/`toTickerResponse` are defined in Task 5 and consumed by the three route files in the same task. `TickerDocument.errors` is a `Map<string, string>` in Task 3, written as a `Map` in Task 4, and converted to a plain object in Task 5.
+**Type consistency:** `Calculated<T>`, `UNAVAILABLE`, and all eleven `compute*` names plus `collectErrors` are defined in Task 2 and consumed under exactly those names in Task 4. `StockData`/`getStockData` are defined in Task 1 and consumed in Tasks 1 and 4. `TickerResponse`/`toTickerResponse` are defined in Task 5 and consumed by the three route files in the same task. `TickerDocument.datapointErrors` is a `Map<string, string>` in Task 3, written as a `Map` in Task 4, and converted to a plain object in Task 5.

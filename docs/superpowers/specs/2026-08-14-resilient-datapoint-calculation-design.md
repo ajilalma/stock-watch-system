@@ -38,7 +38,7 @@ to what the provider actually returned.
 
 ## Non-goals
 
-- No UI work. This spec is backend-only. Rendering `errors` in the stock
+- No UI work. This spec is backend-only. Rendering `datapointErrors` in the stock
   table is separate follow-up work.
 - No new datapoints, and no change to how any existing datapoint is
   calculated when its inputs are present. Behavior changes only on failure.
@@ -135,7 +135,7 @@ Each handles three failure modes, all producing a populated `error`:
 
 1. **Thrown exception** — caught internally; the `Error.message` is used
    verbatim as the error string (`String(err)` for non-Errors). This is how
-   DCF messages like "No historic data available" reach `errors.fairValue`.
+   DCF messages like "No historic data available" reach `datapointErrors.fairValue`.
 2. **Missing or unusable input** — detected before calculating, with a
    human-readable message naming the input. For example, `computePriceToBook`
    returns `"Book value per share unavailable"` when
@@ -155,7 +155,7 @@ On any failure the default value is returned alongside the error:
 multiply `currentPrice` and `fairValue` to zero, making two working
 datapoints indistinguishable from failed ones. Defaulting to `1` leaves
 both in native currency, which is wrong but recognizable, and
-`errors.fxRateToUsd` records the reason.
+`datapointErrors.fxRateToUsd` records the reason.
 
 **Optional-by-design vs. failed.** `pegRatio` and `payoutRatio` are
 legitimately absent for many companies — a company that pays no dividend has
@@ -197,7 +197,7 @@ also makes gaps in the map visible.
 missing `regularMarketPrice` means the quote is unusable, which
 `getStockData` already treats as a hard failure.
 
-### 3. The `errors` object
+### 3. The `datapointErrors` object
 
 New top-level field on the ticker document, sibling to `cachedData`:
 
@@ -211,7 +211,7 @@ export interface TickerDocument extends Document {
   nativeCurrency: string;
   lists: ('portfolio' | 'watchlist')[];
   cachedData?: CachedData;
-  errors?: Record<string, string>;
+  datapointErrors?: Record<string, string>;
 }
 ```
 
@@ -223,7 +223,7 @@ appear; a fully successful fetch stores `{}`.
 {
   symbol: "NEWCO",
   cachedData: { fairValue: 0, priceToBook: 0, currentRatio: 1.8, ... },
-  errors: {
+  datapointErrors: {
     fairValue: "No historic data available",
     priceToBook: "Book value per share unavailable"
   }
@@ -242,8 +242,8 @@ see a normal object.
 `backend/src/models/ticker.model.ts`, from the history model's data schema,
 and from `CachedData` in
 `frontend/src/app/shared/models/ticker.model.ts`. It is replaced by
-`errors.fairValue`. This also resolves the first item in `TODO.md`, which
-should be updated to point at `errors` instead.
+`datapointErrors.fairValue`. This also resolves the first item in `TODO.md`, which
+should be updated to point at `datapointErrors` instead.
 
 ### 4. History and raw data
 
@@ -261,7 +261,7 @@ export interface TickerHistoryDocument extends Document {
   symbol: string;
   archivedAt: Date;
   data: CachedData;
-  errors?: Record<string, string>;
+  datapointErrors?: Record<string, string>;
   stockRawData?: unknown;
 }
 ```
@@ -305,7 +305,7 @@ document is the source of truth for the UI; history is supporting data.
 
 ### 5. API responses
 
-`errors` is returned by both the list endpoints (`GET /api/portfolio`,
+`datapointErrors` is returned by both the list endpoints (`GET /api/portfolio`,
 `GET /api/watchlist`) and every endpoint returning a single ticker
 (`POST /api/portfolio/:symbol`, `POST /api/watchlist/:symbol`,
 `POST /api/tickers/:symbol/refresh`, `POST /api/tickers/refresh`,
@@ -320,11 +320,11 @@ mapper in `TickerService` that builds the response explicitly:
 
 ```ts
 { _id, symbol, companyName, sector, exchange, country,
-  nativeCurrency, lists, cachedData, errors }
+  nativeCurrency, lists, cachedData, datapointErrors }
 ```
 
 All routes return mapped objects. The frontend `Ticker` interface gains
-`errors?: Record<string, string>` to match.
+`datapointErrors?: Record<string, string>` to match.
 
 ### 6. Flow
 
@@ -333,13 +333,13 @@ All routes return mapped objects. The frontend `Ticker` interface gains
 1. `provider.getStockData(symbol)` → `{ quote, financials, raw }`. Throws on
    hard failure; nothing below runs.
 2. Resolve quote metadata (`companyName`, `sector`, `exchange`, `country`),
-   collecting defaults and errors.
+   collecting defaults and datapointErrors.
 3. Call each calculator independently, collecting `{ value, error? }`.
 4. Assemble `cachedData` from the values, applying `fxRateToUsd` to
    `currentPrice` and `fairValue` to produce their USD forms alongside the
    native ones.
-5. Assemble `errors` from the non-empty error strings.
-6. Return `{ metadata, cachedData, errors, raw }`.
+5. Assemble `datapointErrors` from the non-empty error strings.
+6. Return `{ metadata, cachedData, datapointErrors, raw }`.
 
 `addTicker()` and `refreshTicker()` each write the ticker document and then
 append the history document carrying `raw` as `stockRawData`.
@@ -365,10 +365,10 @@ so a failed FX lookup leaves them correct regardless.
 **TickerService** (`ticker.service.test.ts`, extending existing coverage):
 
 - a fetch where two datapoints fail still writes a complete ticker
-  document, with the remaining datapoints correct and exactly two `errors`
+  document, with the remaining datapoints correct and exactly two `datapointErrors`
   entries
 - a datapoint that failed on a previous fetch and succeeds on refresh has
-  its error cleared — `errors` is replaced, not merged
+  its error cleared — `datapointErrors` is replaced, not merged
 - `addTicker` writes one history document containing `stockRawData`
 - each `refreshTicker` appends an additional history document; three
   refreshes after an add leave four history documents for that symbol
@@ -379,7 +379,7 @@ so a failed FX lookup leaves them correct regardless.
 
 **Routes** (`app.test.ts`, extending existing coverage):
 
-- `errors` is present on list and single-ticker responses
+- `datapointErrors` is present on list and single-ticker responses
 - `stockRawData` is absent from every response
 
 Existing cases in `ratio.service.test.ts` carry over into the calculator
@@ -390,13 +390,13 @@ unaffected.
 ## Migration
 
 Ticker documents written before this change have `cachedData.fairValueError`
-and no `errors` field. No migration script: `errors` is optional and
+and no `datapointErrors` field. No migration script: `datapointErrors` is optional and
 absent-means-no-known-errors, and the first refresh of any ticker replaces
-`cachedData` wholesale and populates `errors`. Stale `fairValueError` values
+`cachedData` wholesale and populates `datapointErrors`. Stale `fairValueError` values
 on unrefreshed documents are simply ignored — the field is dropped from the
 model, so it is not read and not returned.
 
-Existing `tickerhistories` documents have no `errors` or `stockRawData`.
+Existing `tickerhistories` documents have no `datapointErrors` or `stockRawData`.
 Both are optional; older rows read as snapshots without them.
 
 ## Files
@@ -420,17 +420,17 @@ Both are optional; older rows read as snapshots without them.
   `getStockData` method, `StockData` type
 - `backend/src/providers/yahoo-finance-v4.provider.ts` — implement
   `getStockData`, return raw payload, drop `pendingSummaries`
-- `backend/src/models/ticker.model.ts` — add `errors`, drop `fairValueError`
-- `backend/src/models/ticker-history.model.ts` — `errors`, `stockRawData`,
+- `backend/src/models/ticker.model.ts` — add `datapointErrors`, drop `fairValueError`
+- `backend/src/models/ticker-history.model.ts` — `datapointErrors`, `stockRawData`,
   mixed `data`, compound index
 - `backend/src/services/ticker.service.ts` — orchestration, history-on-every-write,
   `toTickerResponse`
 - `backend/src/routes/*.routes.ts` — return mapped responses
 - `backend/src/server.ts` — construct v4 provider directly
 - `backend/package.json` — drop `yahoo-finance2`
-- `frontend/src/app/shared/models/ticker.model.ts` — add `errors`, drop
+- `frontend/src/app/shared/models/ticker.model.ts` — add `datapointErrors`, drop
   `fairValueError`
-- `TODO.md` — update the `fairValueError` item to reference `errors`; drop
+- `TODO.md` — update the `fairValueError` item to reference `datapointErrors`; drop
   the v2 `price`-module verification item (v2 is deleted). The v4 live-response
   verification item stays and becomes more pressing, since v4 is now the only
   provider — but the `STOCK_DATA_PROVIDER` instructions in it are no longer
