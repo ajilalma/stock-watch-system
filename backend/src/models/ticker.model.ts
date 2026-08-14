@@ -28,7 +28,7 @@ export interface TickerDocument extends Document {
   nativeCurrency: string;
   lists: ('portfolio' | 'watchlist')[];
   cachedData?: CachedData;
-  // Per-datapoint failure reasons, keyed by cachedData field name (e.g.
+  // Per-datapoint failure reasons, keyed by ticker or cachedData field name (e.g.
   // datapointErrors.fairValue). Replaced wholesale on every fetch rather than merged,
   // so a datapoint that starts working again stops reporting an error.
   datapointErrors?: Map<string, string>;

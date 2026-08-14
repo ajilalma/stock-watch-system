@@ -139,7 +139,7 @@ export function computePayoutRatio(financials: RawFinancials): Calculated<number
     return { value: undefined };
   }
   if (!isUsableDivisor(financials.netIncomeTTM)) {
-    return failed('payoutRatio', 0, 'Net income (TTM) not provided by the data provider');
+    return failed('payoutRatio', 0, 'Net income (TTM) is zero or not provided by the data provider');
   }
   return requireFinite('payoutRatio', financials.dividendsPaidTTM / financials.netIncomeTTM);
 }
