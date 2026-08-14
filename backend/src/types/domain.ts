@@ -14,9 +14,9 @@ export interface RawQuote {
 export interface RawFinancials {
   symbol: string;
   freeCashFlowHistory: number[]; // oldest first, most recent last, up to 5 years
-  sharesOutstanding: number;
-  bookValuePerShare: number;
-  earningsPerShare: number;
+  sharesOutstanding?: number;
+  bookValuePerShare?: number;
+  earningsPerShare?: number;
   earningsGrowthRate?: number; // for PEG, as a percentage e.g. 12 = 12%
   // Yahoo's `financialData` module returns these as finished ratios rather
   // than raw balance-sheet line items (verified empirically: `financialData`
@@ -24,8 +24,8 @@ export interface RawFinancials {
   // returns real balance-sheet figures for most symbols via the public API -
   // see yahoo-finance.provider.ts for details). Carrying the ratios through
   // directly avoids reconstructing them from unavailable/fabricated inputs.
-  currentRatio: number;
-  quickRatio: number;
+  currentRatio?: number;
+  quickRatio?: number;
   lastDividendDate?: Date;
   lastDividendAmount?: number;
   dividendsPaidTTM?: number;

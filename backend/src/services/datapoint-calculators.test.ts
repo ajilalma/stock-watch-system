@@ -109,7 +109,7 @@ test('computePriceToBook divides price by book value per share', () => {
 });
 
 test('computePriceToBook returns 0 and names the missing input when book value is absent', () => {
-  const result = computePriceToBook(quote, { ...financials, bookValuePerShare: undefined as any });
+  const result = computePriceToBook(quote, { ...financials, bookValuePerShare: undefined });
   expect(result.value).toBe(0);
   expect(result.error).toMatch(/book value/i);
 });
@@ -134,7 +134,7 @@ test('computePegRatio is undefined with no error when no growth rate is publishe
 });
 
 test('computePegRatio returns 0 and an error when EPS is missing but growth is published', () => {
-  const result = computePegRatio(quote, { ...financials, earningsPerShare: undefined as any });
+  const result = computePegRatio(quote, { ...financials, earningsPerShare: undefined });
   expect(result.value).toBe(0);
   expect(result.error).toMatch(/earnings per share/i);
 });
@@ -146,7 +146,7 @@ test('computeCurrentRatio passes through the provider value', () => {
 });
 
 test('computeCurrentRatio returns 0 and an error when the provider omits it', () => {
-  const result = computeCurrentRatio({ ...financials, currentRatio: undefined as any });
+  const result = computeCurrentRatio({ ...financials, currentRatio: undefined });
   expect(result.value).toBe(0);
   expect(result.error).toBeTruthy();
 });
@@ -156,7 +156,7 @@ test('computeQuickRatio passes through the provider value, distinct from current
 });
 
 test('computeQuickRatio returns 0 and an error when the provider omits it', () => {
-  const result = computeQuickRatio({ ...financials, quickRatio: undefined as any });
+  const result = computeQuickRatio({ ...financials, quickRatio: undefined });
   expect(result.value).toBe(0);
   expect(result.error).toBeTruthy();
 });

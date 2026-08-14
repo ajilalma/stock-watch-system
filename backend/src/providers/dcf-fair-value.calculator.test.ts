@@ -72,3 +72,17 @@ test('throws a clear error when every year-over-year comparison has a non-positi
     /positive prior-year free cash flow/
   );
 });
+
+test('throws a clear error when shares outstanding is missing', async () => {
+  const calculator = new DcfFairValueCalculator();
+  await expect(
+    calculator.calculate({ ...financials, sharesOutstanding: undefined })
+  ).rejects.toThrow(/shares outstanding/i);
+});
+
+test('throws a clear error when shares outstanding is zero', async () => {
+  const calculator = new DcfFairValueCalculator();
+  await expect(
+    calculator.calculate({ ...financials, sharesOutstanding: 0 })
+  ).rejects.toThrow(/shares outstanding/i);
+});

@@ -13,6 +13,10 @@ export class DcfFairValueCalculator implements FairValueCalculator {
       logger.error(SCOPE, `calculate(${financials.symbol}) - insufficient FCF history`, { symbol: financials.symbol, years: history.length });
       throw new Error('At least 2 years of free cash flow history are required for a DCF calculation');
     }
+    if (typeof financials.sharesOutstanding !== 'number' || !Number.isFinite(financials.sharesOutstanding) || financials.sharesOutstanding === 0) {
+      logger.error(SCOPE, `calculate(${financials.symbol}) - shares outstanding not usable`, { symbol: financials.symbol, sharesOutstanding: financials.sharesOutstanding });
+      throw new Error('Shares outstanding not provided by the data provider, required for a DCF calculation');
+    }
 
     const yearlyGrowthRates: number[] = [];
     for (let i = 1; i < history.length; i++) {
