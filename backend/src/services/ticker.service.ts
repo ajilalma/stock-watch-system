@@ -222,3 +222,51 @@ export class TickerService {
     return this.refreshTicker(ticker.symbol);
   }
 }
+
+export interface TickerResponse {
+  _id: string;
+  symbol: string;
+  companyName: string;
+  sector: string;
+  exchange: string;
+  country: string;
+  nativeCurrency: string;
+  lists: ('portfolio' | 'watchlist')[];
+  cachedData?: CachedData;
+  datapointErrors: Record<string, string>;
+}
+
+// Builds the API shape explicitly instead of serializing the Mongoose
+// document, so what routes return is a decision rather than a side effect of
+// the schema. stockRawData lives only on history documents and so cannot
+// appear here, but an explicit allowlist keeps that true as fields are added.
+export function toTickerResponse(doc: TickerDocument): TickerResponse {
+  // Preserve `undefined` (rather than defaulting to {}) when the source
+  // document has no datapointErrors field at all, so the strip below omits
+  // it entirely for older/sparse documents instead of adding an empty object
+  // that was never there.
+  const errors = doc.datapointErrors instanceof Map
+    ? Object.fromEntries(doc.datapointErrors)
+    : (doc.datapointErrors as Record<string, string> | undefined);
+
+  const response: TickerResponse = {
+    // String(undefined) would otherwise coerce a missing _id into the
+    // literal string "undefined", which survives the strip below.
+    _id: doc._id !== undefined ? String(doc._id) : (undefined as unknown as string),
+    symbol: doc.symbol,
+    companyName: doc.companyName,
+    sector: doc.sector,
+    exchange: doc.exchange,
+    country: doc.country,
+    nativeCurrency: doc.nativeCurrency,
+    lists: doc.lists,
+    cachedData: doc.cachedData,
+    datapointErrors: errors as Record<string, string>
+  };
+
+  // Drop keys the document did not carry, so partially-populated documents
+  // serialize the same way they did before the mapper existed.
+  return Object.fromEntries(
+    Object.entries(response).filter(([, value]) => value !== undefined)
+  ) as TickerResponse;
+}

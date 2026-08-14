@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { TickerService } from '../services/ticker.service';
+import { TickerService, toTickerResponse } from '../services/ticker.service';
 import { asyncHandler } from './async-handler';
 import { logger } from '../logger';
 
@@ -12,14 +12,14 @@ export function watchlistRoutes(service: TickerService): Router {
     logger.info(SCOPE, 'GET / - fetching watchlist');
     const list = await service.getList('watchlist');
     logger.info(SCOPE, 'GET / - returning watchlist', { count: list.length });
-    res.json(list);
+    res.json(list.map(toTickerResponse));
   }));
 
   router.post('/:symbol', asyncHandler(async (req, res) => {
     logger.info(SCOPE, `POST /${req.params.symbol} - adding to watchlist`, { symbol: req.params.symbol });
     const ticker = await service.addTicker(req.params.symbol, 'watchlist');
     logger.info(SCOPE, `POST /${req.params.symbol} - added to watchlist`, { symbol: ticker.symbol, id: String(ticker._id) });
-    res.status(201).json(ticker);
+    res.status(201).json(toTickerResponse(ticker));
   }));
 
   router.delete('/:symbol', asyncHandler(async (req, res) => {

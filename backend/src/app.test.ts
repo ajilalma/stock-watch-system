@@ -85,3 +85,66 @@ test('returns a distinct 4xx (not a bare 500) when addTicker rejects with Symbol
   expect(res.status).toBe(404);
   expect(res.body.error).toMatch(/ZZZZINVALID123/);
 });
+
+function makeTickerDoc(overrides: any = {}): any {
+  return {
+    _id: 'abc123',
+    symbol: 'AAPL',
+    companyName: 'Apple Inc.',
+    sector: 'Technology',
+    exchange: 'NASDAQ',
+    country: 'US',
+    nativeCurrency: 'USD',
+    lists: ['portfolio'],
+    cachedData: { fetchedAt: new Date('2026-08-14T00:00:00Z'), currentPrice: 190, fairValue: 0 },
+    datapointErrors: new Map([['fairValue', 'No historic data available']]),
+    ...overrides
+  };
+}
+
+test('GET /api/portfolio returns the datapointErrors object so the UI can explain missing datapoints', async () => {
+  const service = makeFakeService();
+  service.getList.mockImplementation(async () => [makeTickerDoc()]);
+  const app = createApp(service);
+
+  const res = await request(app).get('/api/portfolio');
+  expect(res.status).toBe(200);
+  expect(res.body[0].datapointErrors).toEqual({ fairValue: 'No historic data available' });
+});
+
+test('POST /api/tickers/:symbol/refresh returns the datapointErrors object', async () => {
+  const service = makeFakeService();
+  service.refreshTicker.mockImplementation(async () => makeTickerDoc());
+  const app = createApp(service);
+
+  const res = await request(app).post('/api/tickers/AAPL/refresh');
+  expect(res.body.datapointErrors).toEqual({ fairValue: 'No historic data available' });
+});
+
+test('POST /api/portfolio/:symbol returns the datapointErrors object', async () => {
+  const service = makeFakeService();
+  service.addTicker.mockImplementation(async () => makeTickerDoc());
+  const app = createApp(service);
+
+  const res = await request(app).post('/api/portfolio/AAPL');
+  expect(res.body.datapointErrors).toEqual({ fairValue: 'No historic data available' });
+});
+
+test('responses never include stockRawData, however the document was populated', async () => {
+  const service = makeFakeService();
+  service.getList.mockImplementation(async () => [makeTickerDoc({ stockRawData: { quoteSummary: { secret: true } } })]);
+  const app = createApp(service);
+
+  const res = await request(app).get('/api/portfolio');
+  expect(res.body[0].stockRawData).toBeUndefined();
+  expect(JSON.stringify(res.body)).not.toContain('secret');
+});
+
+test('a ticker with no failures returns an empty datapointErrors object rather than omitting it', async () => {
+  const service = makeFakeService();
+  service.getList.mockImplementation(async () => [makeTickerDoc({ datapointErrors: new Map() })]);
+  const app = createApp(service);
+
+  const res = await request(app).get('/api/portfolio');
+  expect(res.body[0].datapointErrors).toEqual({});
+});
