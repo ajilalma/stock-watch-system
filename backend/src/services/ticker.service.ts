@@ -249,10 +249,10 @@ export function toTickerResponse(doc: TickerDocument): TickerResponse {
     ? Object.fromEntries(doc.datapointErrors)
     : (doc.datapointErrors as Record<string, string> | undefined);
 
-  const response: TickerResponse = {
+  const response: Partial<TickerResponse> = {
     // String(undefined) would otherwise coerce a missing _id into the
     // literal string "undefined", which survives the strip below.
-    _id: doc._id !== undefined ? String(doc._id) : (undefined as unknown as string),
+    _id: doc._id !== undefined ? String(doc._id) : undefined,
     symbol: doc.symbol,
     companyName: doc.companyName,
     sector: doc.sector,
@@ -261,12 +261,12 @@ export function toTickerResponse(doc: TickerDocument): TickerResponse {
     nativeCurrency: doc.nativeCurrency,
     lists: doc.lists,
     cachedData: doc.cachedData,
-    datapointErrors: errors as Record<string, string>
+    datapointErrors: errors
   };
 
   // Drop keys the document did not carry, so partially-populated documents
   // serialize the same way they did before the mapper existed.
   return Object.fromEntries(
     Object.entries(response).filter(([, value]) => value !== undefined)
-  ) as TickerResponse;
+  ) as unknown as TickerResponse;
 }
