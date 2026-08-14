@@ -60,6 +60,7 @@ afterAll(async () => {
 
 afterEach(async () => {
   await TickerModel.deleteMany({});
+  await TickerHistoryModel.deleteMany({});
 });
 
 test('addTicker creates a new ticker doc with fetched+cached data', async () => {
@@ -124,32 +125,6 @@ test('removeTicker deletes the doc entirely when its last list is removed', asyn
   expect(remaining).toBeNull();
 });
 
-test('addTicker falls back to fairValue=0 and records fairValueError when the DCF calculation fails', async () => {
-  const service = new TickerService(fakeProvider, failingCalculator, fakeConverter);
-  const ticker = await service.addTicker('AAPL', 'portfolio');
-
-  expect(ticker.cachedData?.fairValue).toBe(0);
-  expect(ticker.cachedData?.nativeFairValue).toBe(0);
-  expect(ticker.cachedData?.fairValueError).toBe(
-    'At least one valid year-over-year comparison with a positive prior-year free cash flow is required for a DCF calculation'
-  );
-  // Everything else should still populate normally - only fairValue is affected.
-  expect(ticker.cachedData?.currentPrice).toBe(100);
-  expect(ticker.cachedData?.currentRatio).toBe(2);
-});
-
-test('a later successful refresh clears a previously-recorded fairValueError', async () => {
-  const service = new TickerService(fakeProvider, failingCalculator, fakeConverter);
-  const ticker = await service.addTicker('AAPL', 'portfolio');
-  expect(ticker.cachedData?.fairValueError).toBeDefined();
-
-  const recoveredService = new TickerService(fakeProvider, fakeCalculator, fakeConverter);
-  const refreshed = await recoveredService.refreshTicker('AAPL');
-
-  expect(refreshed.cachedData?.fairValueError).toBeUndefined();
-  expect(refreshed.cachedData?.fairValue).toBe(120);
-});
-
 test('getList returns tickers for the given list, sorted by sector then company name', async () => {
   const service = new TickerService(fakeProvider, fakeCalculator, fakeConverter);
   await service.addTicker('ZZZ', 'portfolio');
@@ -159,23 +134,6 @@ test('getList returns tickers for the given list, sorted by sector then company 
 
   const list = await service.getList('portfolio');
   expect(list.map(t => t.symbol)).toEqual(['ZZZ', 'AAA']); // Energy before Technology
-});
-
-afterEach(async () => {
-  await TickerHistoryModel.deleteMany({});
-});
-
-test('refreshTicker archives the previous cachedData into tickerHistory before overwriting', async () => {
-  const service = new TickerService(fakeProvider, fakeCalculator, fakeConverter);
-  const original = await service.addTicker('AAPL', 'portfolio');
-  const originalFetchedAt = original.cachedData!.fetchedAt;
-
-  await service.refreshTicker('AAPL');
-
-  const historyEntries = await TickerHistoryModel.find({ symbol: 'AAPL' });
-  expect(historyEntries).toHaveLength(1);
-  expect(historyEntries[0].data.currentPrice).toBe(original.cachedData!.currentPrice);
-  expect(historyEntries[0].archivedAt.getTime()).toBe(originalFetchedAt.getTime());
 });
 
 test('refreshTicker updates cachedData.fetchedAt to a newer timestamp', async () => {
@@ -200,7 +158,7 @@ test('ensureFresh refreshes a ticker whose cachedData is older than 15 days', as
   expect(result.cachedData!.fetchedAt.getTime()).toBeGreaterThan(staleDate.getTime());
 
   const historyEntries = await TickerHistoryModel.find({ symbol: 'AAPL' });
-  expect(historyEntries).toHaveLength(1);
+  expect(historyEntries).toHaveLength(2);
 });
 
 test('ensureFresh does not refresh a ticker whose cachedData is within 15 days', async () => {
@@ -212,5 +170,122 @@ test('ensureFresh does not refresh a ticker whose cachedData is within 15 days',
   expect(result.cachedData!.fetchedAt.getTime()).toBe(freshFetchedAt.getTime());
 
   const historyEntries = await TickerHistoryModel.find({ symbol: 'AAPL' });
-  expect(historyEntries).toHaveLength(0);
+  expect(historyEntries).toHaveLength(1);
+});
+
+const failingConverter: CurrencyConverter = {
+  getRate: async () => { throw new Error('Frankfurter unreachable'); }
+};
+
+test('a failed datapoint records an error and leaves every other datapoint intact', async () => {
+  const service = new TickerService(fakeProvider, failingCalculator, fakeConverter);
+  const ticker = await service.addTicker('AAPL', 'portfolio');
+
+  expect(ticker.cachedData?.fairValue).toBe(0);
+  expect(ticker.cachedData?.nativeFairValue).toBe(0);
+  expect(ticker.datapointErrors?.get('fairValue')).toBe(
+    'At least one valid year-over-year comparison with a positive prior-year free cash flow is required for a DCF calculation'
+  );
+  expect(ticker.cachedData?.currentPrice).toBe(100);
+  expect(ticker.cachedData?.priceToBook).toBe(2);
+  expect(ticker.cachedData?.currentRatio).toBe(2);
+});
+
+test('two independent failures each record their own error without affecting the rest', async () => {
+  const brokenProvider: StockDataProvider = {
+    getStockData: async (symbol: string) => {
+      const base = await fakeProvider.getStockData(symbol);
+      return {
+        ...base,
+        financials: { ...base.financials, bookValuePerShare: 0, quickRatio: undefined as any }
+      };
+    }
+  };
+  const service = new TickerService(brokenProvider, fakeCalculator, fakeConverter);
+  const ticker = await service.addTicker('AAPL', 'portfolio');
+
+  expect(Object.keys(Object.fromEntries(ticker.datapointErrors!)).sort()).toEqual(['priceToBook', 'quickRatio']);
+  expect(ticker.cachedData?.priceToBook).toBe(0);
+  expect(ticker.cachedData?.quickRatio).toBe(0);
+  expect(ticker.cachedData?.fairValue).toBe(120);
+  expect(ticker.cachedData?.currentRatio).toBe(2);
+});
+
+test('a successful fetch stores an empty datapointErrors object', async () => {
+  const service = new TickerService(fakeProvider, fakeCalculator, fakeConverter);
+  const ticker = await service.addTicker('AAPL', 'portfolio');
+  expect(Object.fromEntries(ticker.datapointErrors!)).toEqual({});
+});
+
+test('a refresh replaces the datapointErrors object rather than merging, so recovered datapoints clear', async () => {
+  const service = new TickerService(fakeProvider, failingCalculator, fakeConverter);
+  const ticker = await service.addTicker('AAPL', 'portfolio');
+  expect(ticker.datapointErrors?.get('fairValue')).toBeDefined();
+
+  const recoveredService = new TickerService(fakeProvider, fakeCalculator, fakeConverter);
+  const refreshed = await recoveredService.refreshTicker('AAPL');
+
+  expect(refreshed.datapointErrors?.get('fairValue')).toBeUndefined();
+  expect(refreshed.cachedData?.fairValue).toBe(120);
+});
+
+test('a failed FX lookup falls back to rate 1 so prices stay in native currency, not zero', async () => {
+  const service = new TickerService(fakeProvider, fakeCalculator, failingConverter);
+  const ticker = await service.addTicker('AAPL', 'portfolio');
+
+  expect(ticker.cachedData?.fxRateToUsd).toBe(1);
+  expect(ticker.cachedData?.currentPrice).toBe(100);
+  expect(ticker.cachedData?.nativeFairValue).toBe(120);
+  expect(ticker.datapointErrors?.get('fxRateToUsd')).toBe('Frankfurter unreachable');
+});
+
+test('addTicker writes one history snapshot carrying the raw provider payload', async () => {
+  const service = new TickerService(fakeProvider, fakeCalculator, fakeConverter);
+  await service.addTicker('AAPL', 'portfolio');
+
+  const history = await TickerHistoryModel.find({ symbol: 'AAPL' });
+  expect(history).toHaveLength(1);
+  expect((history[0].data as any).currentPrice).toBe(100);
+  expect((history[0].stockRawData as any).quoteSummary).toEqual({ stub: true });
+});
+
+test('each refresh appends another history snapshot rather than replacing one', async () => {
+  const service = new TickerService(fakeProvider, fakeCalculator, fakeConverter);
+  await service.addTicker('AAPL', 'portfolio');
+  await service.refreshTicker('AAPL');
+  await service.refreshTicker('AAPL');
+  await service.refreshTicker('AAPL');
+
+  expect(await TickerHistoryModel.countDocuments({ symbol: 'AAPL' })).toBe(4);
+});
+
+test('a history snapshot records the datapointErrors from its own fetch', async () => {
+  const service = new TickerService(fakeProvider, failingCalculator, fakeConverter);
+  await service.addTicker('AAPL', 'portfolio');
+
+  const history = await TickerHistoryModel.findOne({ symbol: 'AAPL' });
+  expect((history?.datapointErrors as any).fairValue).toBeTruthy();
+});
+
+test('a history write failure is logged but does not fail the add', async () => {
+  const service = new TickerService(fakeProvider, fakeCalculator, fakeConverter);
+  const createSpy = jest.spyOn(TickerHistoryModel, 'create')
+    .mockRejectedValueOnce(new Error('history collection unavailable') as never);
+
+  const ticker = await service.addTicker('AAPL', 'portfolio');
+
+  expect(ticker.cachedData?.currentPrice).toBe(100);
+  expect(await TickerModel.countDocuments({ symbol: 'AAPL' })).toBe(1);
+  createSpy.mockRestore();
+});
+
+test('a provider failure still aborts the add entirely and writes nothing', async () => {
+  const deadProvider: StockDataProvider = {
+    getStockData: async () => { throw new Error('Yahoo unreachable'); }
+  };
+  const service = new TickerService(deadProvider, fakeCalculator, fakeConverter);
+
+  await expect(service.addTicker('AAPL', 'portfolio')).rejects.toThrow('Yahoo unreachable');
+  expect(await TickerModel.countDocuments({ symbol: 'AAPL' })).toBe(0);
+  expect(await TickerHistoryModel.countDocuments({ symbol: 'AAPL' })).toBe(0);
 });

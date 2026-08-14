@@ -1,7 +1,12 @@
 import { StockDataProvider } from '../providers/stock-data-provider.interface';
 import { FairValueCalculator } from '../providers/fair-value-calculator.interface';
 import { CurrencyConverter } from '../providers/currency-converter.interface';
-import { RatioService } from './ratio.service';
+import {
+  computeCompanyName, computeSector, computeExchange, computeCountry,
+  computeFairValue, computePriceToBook, computePegRatio,
+  computeCurrentRatio, computeQuickRatio, computePayoutRatio,
+  computeFxRate, collectErrors
+} from './datapoint-calculators';
 import { TickerModel, TickerDocument, CachedData } from '../models/ticker.model';
 import { TickerHistoryModel } from '../models/ticker-history.model';
 import { logger } from '../logger';
@@ -10,6 +15,18 @@ const SCOPE = 'TickerService';
 const DISPLAY_CURRENCY = 'USD';
 const FIFTEEN_DAYS_MS = 15 * 24 * 60 * 60 * 1000;
 
+interface FetchedStock {
+  symbol: string;
+  companyName: string;
+  sector: string;
+  exchange: string;
+  country: string;
+  nativeCurrency: string;
+  cachedData: CachedData;
+  datapointErrors: Record<string, string>;
+  raw: unknown;
+}
+
 export class TickerService {
   constructor(
     private provider: StockDataProvider,
@@ -17,65 +34,91 @@ export class TickerService {
     private converter: CurrencyConverter
   ) {}
 
-  private async fetchCachedData(symbol: string): Promise<{
-    symbol: string; companyName: string; sector: string; exchange: string; country: string; nativeCurrency: string;
-    cachedData: CachedData;
-  }> {
-    logger.info(SCOPE, `fetchCachedData(${symbol}) - calling provider.getStockData`, { symbol });
-    const { quote, financials } = await this.provider.getStockData(symbol);
-    logger.info(SCOPE, `fetchCachedData(${symbol}) - got stock data`, { symbol, currentPrice: quote.currentPrice, currency: quote.currency, fcfYears: financials.freeCashFlowHistory.length });
+  // Pure orchestration: fetch once, then run each datapoint calculation
+  // independently. None of the calculators throw, so a company missing one or
+  // two derivable figures still produces a complete document with the reasons
+  // recorded alongside it.
+  private async fetchStockData(symbol: string): Promise<FetchedStock> {
+    logger.info(SCOPE, `fetchStockData(${symbol}) - calling provider`, { symbol });
+    const { quote, financials, raw } = await this.provider.getStockData(symbol);
+    logger.info(SCOPE, `fetchStockData(${symbol}) - got stock data`, {
+      symbol, currentPrice: quote.currentPrice, currency: quote.currency,
+      fcfYears: financials.freeCashFlowHistory.length
+    });
 
-    // A DCF failure (e.g. insufficient or all-negative-prior-year free cash
-    // flow history - common for newly-listed, loss-making, or unusual
-    // companies) shouldn't fail the whole add/refresh. Fall back to
-    // fairValue=0 and record why, so it's visible in the DB for review
-    // rather than silently guessed at or blocking the user entirely.
-    let fairValue = 0;
-    let fairValueError: string | undefined;
-    try {
-      const fairValueResult = await this.calculator.calculate(financials);
-      fairValue = fairValueResult.fairValue;
-      logger.info(SCOPE, `fetchCachedData(${symbol}) - calculated fair value`, { symbol, fairValue });
-    } catch (err) {
-      fairValueError = err instanceof Error ? err.message : String(err);
-      logger.warn(SCOPE, `fetchCachedData(${symbol}) - DCF calculation failed, falling back to fairValue=0`, { symbol, error: fairValueError });
-    }
+    const companyName = computeCompanyName(quote);
+    const sector = computeSector(quote);
+    const exchange = computeExchange(quote);
+    const country = computeCountry(quote);
+    const fairValue = await computeFairValue(financials, this.calculator);
+    const priceToBook = computePriceToBook(quote, financials);
+    const pegRatio = computePegRatio(quote, financials);
+    const currentRatio = computeCurrentRatio(financials);
+    const quickRatio = computeQuickRatio(financials);
+    const payoutRatio = computePayoutRatio(financials);
+    const fxRateToUsd = await computeFxRate(quote, DISPLAY_CURRENCY, this.converter);
 
-    const ratios = RatioService.compute(quote, financials);
+    const errors = collectErrors({
+      companyName, sector, exchange, country, fairValue, priceToBook,
+      pegRatio, currentRatio, quickRatio, payoutRatio, fxRateToUsd
+    });
 
-    logger.info(SCOPE, `fetchCachedData(${symbol}) - converting ${quote.currency} to ${DISPLAY_CURRENCY}`, { symbol });
-    const fxRateToUsd = await this.converter.getRate(quote.currency, DISPLAY_CURRENCY);
-    logger.info(SCOPE, `fetchCachedData(${symbol}) - fx rate`, { symbol, fxRateToUsd });
-
+    // Native values are stored pre-conversion, so a failed FX lookup leaves
+    // them correct regardless of what the rate fell back to.
     const cachedData: CachedData = {
       fetchedAt: new Date(),
-      currentPrice: quote.currentPrice * fxRateToUsd,
-      fairValue: fairValue * fxRateToUsd,
+      currentPrice: quote.currentPrice * fxRateToUsd.value,
+      fairValue: fairValue.value * fxRateToUsd.value,
       nativePrice: quote.currentPrice,
-      nativeFairValue: fairValue,
-      fxRateToUsd,
-      priceToBook: ratios.priceToBook,
+      nativeFairValue: fairValue.value,
+      fxRateToUsd: fxRateToUsd.value,
+      priceToBook: priceToBook.value,
       priceToBookIndustryAvg: financials.priceToBookIndustryAvg,
-      pegRatio: ratios.pegRatio,
-      currentRatio: ratios.currentRatio,
+      pegRatio: pegRatio.value,
+      currentRatio: currentRatio.value,
       currentRatioIndustryAvg: financials.currentRatioIndustryAvg,
-      quickRatio: ratios.quickRatio,
+      quickRatio: quickRatio.value,
       quickRatioIndustryAvg: financials.quickRatioIndustryAvg,
       lastDividendDate: financials.lastDividendDate,
       lastDividendAmount: financials.lastDividendAmount,
-      payoutRatio: ratios.payoutRatio,
-      fairValueError
+      payoutRatio: payoutRatio.value
     };
+
+    logger.info(SCOPE, `fetchStockData(${symbol}) - assembled`, { symbol, errorFields: Object.keys(errors) });
 
     return {
       symbol: quote.symbol,
-      companyName: quote.companyName ?? 'Unavailable',
-      sector: quote.sector ?? 'Unavailable',
-      exchange: quote.exchange ?? 'Unavailable',
-      country: quote.country ?? 'Unavailable',
+      companyName: companyName.value,
+      sector: sector.value,
+      exchange: exchange.value,
+      country: country.value,
       nativeCurrency: quote.currency,
-      cachedData
+      cachedData,
+      datapointErrors: errors,
+      raw
     };
+  }
+
+  // Every write to the tickers collection appends a snapshot here, so the
+  // tickers collection stays light for the UI while history carries both the
+  // time series and the raw payload for debugging. A failure to archive is
+  // logged but never fails the add/refresh - the ticker document is what the
+  // UI needs; history is supporting data.
+  private async archiveSnapshot(symbol: string, fetched: FetchedStock): Promise<void> {
+    try {
+      await TickerHistoryModel.create({
+        symbol,
+        archivedAt: fetched.cachedData.fetchedAt,
+        data: fetched.cachedData,
+        datapointErrors: fetched.datapointErrors,
+        stockRawData: fetched.raw
+      });
+      logger.info(SCOPE, `archiveSnapshot(${symbol}) - snapshot written`, { symbol, archivedAt: fetched.cachedData.fetchedAt });
+    } catch (err) {
+      logger.error(SCOPE, `archiveSnapshot(${symbol}) - failed to write snapshot, continuing`, {
+        symbol, error: err instanceof Error ? err.message : String(err)
+      });
+    }
   }
 
   async addTicker(symbol: string, list: 'portfolio' | 'watchlist'): Promise<TickerDocument> {
@@ -94,14 +137,16 @@ export class TickerService {
     }
 
     logger.info(SCOPE, `addTicker(${normalizedSymbol}, ${list}) - no existing document, fetching fresh data`, { symbol: normalizedSymbol });
-    const { companyName, sector, exchange, country, nativeCurrency, cachedData, symbol: canonicalSymbol } =
-      await this.fetchCachedData(normalizedSymbol);
+    const fetched = await this.fetchStockData(normalizedSymbol);
 
     const created = await TickerModel.create({
-      symbol: canonicalSymbol, companyName, sector, exchange, country, nativeCurrency,
-      lists: [list], cachedData
+      symbol: fetched.symbol, companyName: fetched.companyName, sector: fetched.sector,
+      exchange: fetched.exchange, country: fetched.country, nativeCurrency: fetched.nativeCurrency,
+      lists: [list], cachedData: fetched.cachedData, datapointErrors: fetched.datapointErrors
     });
-    logger.info(SCOPE, `addTicker(${normalizedSymbol}, ${list}) - saved new document to MongoDB`, { symbol: canonicalSymbol, id: String(created._id) });
+    logger.info(SCOPE, `addTicker(${normalizedSymbol}, ${list}) - saved new document to MongoDB`, { symbol: fetched.symbol, id: String(created._id) });
+
+    await this.archiveSnapshot(fetched.symbol, fetched);
     return created;
   }
 
@@ -138,19 +183,15 @@ export class TickerService {
       throw new Error(`Ticker ${symbol} not found`);
     }
 
-    if (ticker.cachedData) {
-      await TickerHistoryModel.create({
-        symbol,
-        archivedAt: ticker.cachedData.fetchedAt,
-        data: ticker.cachedData
-      });
-      logger.info(SCOPE, `refreshTicker(${symbol}) - archived previous snapshot to history`, { symbol, archivedAt: ticker.cachedData.fetchedAt });
-    }
-
-    const { cachedData } = await this.fetchCachedData(symbol);
-    ticker.cachedData = cachedData;
+    const fetched = await this.fetchStockData(symbol);
+    ticker.cachedData = fetched.cachedData;
+    // Assigned wholesale rather than merged, so a datapoint that recovered
+    // since the last fetch drops its stale error.
+    ticker.datapointErrors = new Map(Object.entries(fetched.datapointErrors));
     await ticker.save();
-    logger.info(SCOPE, `refreshTicker(${symbol}) - saved refreshed data to MongoDB`, { symbol, fetchedAt: cachedData.fetchedAt });
+    logger.info(SCOPE, `refreshTicker(${symbol}) - saved refreshed data to MongoDB`, { symbol, fetchedAt: fetched.cachedData.fetchedAt, errorFields: Object.keys(fetched.datapointErrors) });
+
+    await this.archiveSnapshot(symbol, fetched);
     return ticker;
   }
 
