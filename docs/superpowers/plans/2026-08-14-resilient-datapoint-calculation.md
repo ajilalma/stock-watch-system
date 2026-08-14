@@ -1525,7 +1525,7 @@ Replace the entire `fetchCachedData` method with:
         symbol,
         archivedAt: fetched.cachedData.fetchedAt,
         data: fetched.cachedData,
-        errors: fetched.datapointErrors,
+        datapointErrors: fetched.datapointErrors,
         stockRawData: fetched.raw
       });
       logger.info(SCOPE, `archiveSnapshot(${symbol}) - snapshot written`, { symbol, archivedAt: fetched.cachedData.fetchedAt });
@@ -1563,7 +1563,7 @@ with:
     const created = await TickerModel.create({
       symbol: fetched.symbol, companyName: fetched.companyName, sector: fetched.sector,
       exchange: fetched.exchange, country: fetched.country, nativeCurrency: fetched.nativeCurrency,
-      lists: [list], cachedData: fetched.cachedData, errors: fetched.datapointErrors
+      lists: [list], cachedData: fetched.cachedData, datapointErrors: fetched.datapointErrors
     });
     logger.info(SCOPE, `addTicker(${normalizedSymbol}, ${list}) - saved new document to MongoDB`, { symbol: fetched.symbol, id: String(created._id) });
 
@@ -1882,7 +1882,7 @@ From the repository root, replace the first bullet in `TODO.md`:
 with:
 
 ```
-- Surface the `datapointErrors` object in the UI. Any datapoint with an entry in `Ticker.errors` (keyed by `cachedData` field name) fell back to a default — 0 for numbers, "Unavailable" for strings — so the displayed value is not real. `StockTableComponent` needs a way to show this per cell (e.g. a tooltip/title carrying the error text, plus a warning marker) so a fabricated 0 is never mistaken for a real figure. The field is returned by the list and detail APIs and exists on `Ticker` in both backend (`backend/src/models/ticker.model.ts`) and frontend (`frontend/src/app/shared/models/ticker.model.ts`).
+- Surface the `datapointErrors` object in the UI. Any datapoint with an entry in `Ticker.datapointErrors` (keyed by `cachedData` field name) fell back to a default — 0 for numbers, "Unavailable" for strings — so the displayed value is not real. `StockTableComponent` needs a way to show this per cell (e.g. a tooltip/title carrying the error text, plus a warning marker) so a fabricated 0 is never mistaken for a real figure. The field is returned by the list and detail APIs and exists on `Ticker` in both backend (`backend/src/models/ticker.model.ts`) and frontend (`frontend/src/app/shared/models/ticker.model.ts`).
 ```
 
 Replace the second bullet (the `YahooFinanceV4Provider` verification item) with:
