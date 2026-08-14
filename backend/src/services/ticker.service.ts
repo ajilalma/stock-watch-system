@@ -185,6 +185,10 @@ export class TickerService {
 
     const fetched = await this.fetchStockData(symbol);
     ticker.cachedData = fetched.cachedData;
+    ticker.companyName = fetched.companyName;
+    ticker.sector = fetched.sector;
+    ticker.exchange = fetched.exchange;
+    ticker.country = fetched.country;
     // Assigned wholesale rather than merged, so a datapoint that recovered
     // since the last fetch drops its stale error.
     ticker.datapointErrors = new Map(Object.entries(fetched.datapointErrors));
@@ -233,7 +237,7 @@ export interface TickerResponse {
   nativeCurrency: string;
   lists: ('portfolio' | 'watchlist')[];
   cachedData?: CachedData;
-  datapointErrors: Record<string, string>;
+  datapointErrors?: Record<string, string>;
 }
 
 // Builds the API shape explicitly instead of serializing the Mongoose

@@ -197,7 +197,7 @@ test('two independent failures each record their own error without affecting the
       const base = await fakeProvider.getStockData(symbol);
       return {
         ...base,
-        financials: { ...base.financials, bookValuePerShare: 0, quickRatio: undefined as any }
+        financials: { ...base.financials, bookValuePerShare: 0, quickRatio: undefined }
       };
     }
   };
@@ -227,6 +227,25 @@ test('a refresh replaces the datapointErrors object rather than merging, so reco
 
   expect(refreshed.datapointErrors?.get('fairValue')).toBeUndefined();
   expect(refreshed.cachedData?.fairValue).toBe(120);
+});
+
+test('refreshTicker updates metadata fields, not just cachedData and datapointErrors', async () => {
+  const noNameProvider: StockDataProvider = {
+    getStockData: async (symbol: string) => {
+      const base = await fakeProvider.getStockData(symbol);
+      return { ...base, quote: { ...base.quote, companyName: undefined } };
+    }
+  };
+  const service = new TickerService(noNameProvider, fakeCalculator, fakeConverter);
+  const ticker = await service.addTicker('AAPL', 'portfolio');
+  expect(ticker.companyName).toBe('Unavailable');
+  expect(ticker.datapointErrors?.get('companyName')).toBeDefined();
+
+  const recoveredService = new TickerService(fakeProvider, fakeCalculator, fakeConverter);
+  const refreshed = await recoveredService.refreshTicker('AAPL');
+
+  expect(refreshed.companyName).toBe('AAPL Inc.');
+  expect(refreshed.datapointErrors?.get('companyName')).toBeUndefined();
 });
 
 test('a failed FX lookup falls back to rate 1 so prices stay in native currency, not zero', async () => {
