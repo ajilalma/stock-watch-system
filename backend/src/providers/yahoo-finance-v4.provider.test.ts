@@ -76,3 +76,53 @@ test('getStockData throws SymbolNotFoundError when the response has no price mod
   const provider = makeProvider({ summaryProfile: { sector: 'Technology' } }, TIME_SERIES);
   await expect(provider.getStockData('ZZZZ')).rejects.toThrow(SymbolNotFoundError);
 });
+
+test('getStockData throws SymbolNotFoundError when price is present but regularMarketPrice is missing', async () => {
+  const summary = {
+    ...FULL_SUMMARY,
+    price: { ...FULL_SUMMARY.price, regularMarketPrice: undefined }
+  };
+  const provider = makeProvider(summary, TIME_SERIES);
+  await expect(provider.getStockData('ZZZZ')).rejects.toThrow(SymbolNotFoundError);
+});
+
+test('getStockData throws SymbolNotFoundError when price is present but regularMarketPrice is non-finite', async () => {
+  const summary = {
+    ...FULL_SUMMARY,
+    price: { ...FULL_SUMMARY.price, regularMarketPrice: NaN }
+  };
+  const provider = makeProvider(summary, TIME_SERIES);
+  await expect(provider.getStockData('ZZZZ')).rejects.toThrow(SymbolNotFoundError);
+});
+
+test('getStockData throws SymbolNotFoundError when price is present but currency is missing', async () => {
+  const summary = {
+    ...FULL_SUMMARY,
+    price: { ...FULL_SUMMARY.price, currency: undefined }
+  };
+  const provider = makeProvider(summary, TIME_SERIES);
+  await expect(provider.getStockData('ZZZZ')).rejects.toThrow(SymbolNotFoundError);
+});
+
+test('getStockData throws SymbolNotFoundError when price is present but currency is blank', async () => {
+  const summary = {
+    ...FULL_SUMMARY,
+    price: { ...FULL_SUMMARY.price, currency: '   ' }
+  };
+  const provider = makeProvider(summary, TIME_SERIES);
+  await expect(provider.getStockData('ZZZZ')).rejects.toThrow(SymbolNotFoundError);
+});
+
+test('getStockData resolves with an empty free cash flow history when fundamentalsTimeSeries fails', async () => {
+  const provider = new YahooFinanceV4Provider();
+  (provider as any).client = {
+    quoteSummary: jest.fn(async () => FULL_SUMMARY),
+    fundamentalsTimeSeries: jest.fn(async () => { throw new Error('rate limited'); })
+  };
+
+  const result = await provider.getStockData('AAPL');
+
+  expect(result.financials.freeCashFlowHistory).toEqual([]);
+  expect(result.quote.currentPrice).toBe(190);
+  expect(result.financials.bookValuePerShare).toBe(4.5);
+});

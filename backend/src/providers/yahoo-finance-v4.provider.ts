@@ -53,7 +53,18 @@ export class YahooFinanceV4Provider implements StockDataProvider {
     const quoteSummary = await this.fetchQuoteSummary(symbol);
 
     logger.info(SCOPE, `getStockData(${symbol}) - calling fundamentalsTimeSeries for cash flow`, { symbol });
-    const fundamentalsTimeSeries = await this.fetchFundamentalsTimeSeries(symbol);
+    // Only fairValue depends on this second call, and its calculator already
+    // fails cleanly on insufficient history - so a failure here (network
+    // blip, rate limit) degrades to a missing fairValue instead of aborting
+    // the whole add/refresh, which every other datapoint doesn't need.
+    let fundamentalsTimeSeries: any[] = [];
+    try {
+      fundamentalsTimeSeries = await this.fetchFundamentalsTimeSeries(symbol);
+    } catch (err) {
+      logger.warn(SCOPE, `getStockData(${symbol}) - fundamentalsTimeSeries failed, continuing with no cash flow history`, {
+        symbol, error: err instanceof Error ? err.message : String(err)
+      });
+    }
 
     const quote = this.toQuote(symbol, quoteSummary);
     const financials = this.toFinancials(symbol, quoteSummary, fundamentalsTimeSeries);
@@ -97,6 +108,14 @@ export class YahooFinanceV4Provider implements StockDataProvider {
     const price = summary?.price;
     if (!price) {
       logger.warn(SCOPE, `toQuote(${symbol}) - no price module in response`, { symbol });
+      throw new SymbolNotFoundError(symbol);
+    }
+    if (typeof price.regularMarketPrice !== 'number' || !Number.isFinite(price.regularMarketPrice)) {
+      logger.warn(SCOPE, `toQuote(${symbol}) - price module present but regularMarketPrice is missing or non-finite`, { symbol, regularMarketPrice: price.regularMarketPrice });
+      throw new SymbolNotFoundError(symbol);
+    }
+    if (typeof price.currency !== 'string' || price.currency.trim() === '') {
+      logger.warn(SCOPE, `toQuote(${symbol}) - price module present but currency is missing or blank`, { symbol, currency: price.currency });
       throw new SymbolNotFoundError(symbol);
     }
 
