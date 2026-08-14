@@ -162,8 +162,11 @@ legitimately absent for many companies — a company that pays no dividend has
 no payout ratio, and that is not an error. These calculators distinguish the
 two cases: an input
 that is absent *because the concept does not apply* returns
-`{ value: 0 }` with **no** error, while an input that should exist but is
-missing or malformed returns `{ value: 0, error: ... }`. Concretely:
+`{ value: undefined }` with **no** error, while an input that should exist but
+is missing or malformed returns `{ value: 0, error: ... }`. These two fields
+keep the `number | undefined` type they already have in `CachedData` —
+storing `0` for a company that pays no dividend would render as a real value
+in the UI rather than as an absence. Concretely:
 
 - `computePegRatio` — `earningsGrowthRate` absent or `0` → no error
   (growth rate not published). `earningsPerShare` absent or `0` → error.
