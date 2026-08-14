@@ -1,40 +1,28 @@
 // backend/src/providers/yahoo-finance-v4.provider.ts
 //
-// StockDataProvider implementation on yahoo-finance2 v4, installed alongside
-// v2 under a package alias (`yahoo-finance2-v4` -> npm:yahoo-finance2@^4.0.2)
-// so both versions coexist and either can be wired up in server.ts without
-// touching TickerService or the StockDataProvider interface. v2 is kept as
-// YahooFinanceProvider (yahoo-finance.provider.ts) for fallback.
+// The only StockDataProvider implementation, built on yahoo-finance2 v4
+// (installed under the package alias `yahoo-finance2-v4`).
 //
-// v4 field names below (price/summaryProfile/defaultKeyStatistics/
-// financialData/summaryDetail modules) are verified against the installed
-// package's TypeScript definitions (node_modules/yahoo-finance2-v4/esm/src/
-// modules/quoteSummary-iface.d.ts), which is authoritative for field
-// *existence* - but NOT yet verified against a live response, since Yahoo
-// was rate-limiting at the time this was written. The "not found" error
-// message pattern is also carried over from v2 unverified. Spot-check once
-// unblocked, same discipline as yahoo-finance.provider.ts.
+// Field names below (price/summaryProfile/defaultKeyStatistics/financialData/
+// summaryDetail modules) are verified against the installed package's
+// TypeScript definitions, which is authoritative for field *existence* - but
+// not yet against a live response, since Yahoo was rate-limiting when this
+// was written. The "not found" error message pattern is likewise unverified.
+// See TODO.md; spot-check once unblocked.
 //
-// Unlike v2, cash flow data is NOT available (beyond minimal data) via
-// quoteSummary in v4 - Yahoo moved it to a separate fundamentalsTimeSeries
-// endpoint. This means getFinancials() here makes its own additional call
-// beyond the shared quoteSummary fetch: 2 real Yahoo requests per full
-// add/refresh (quoteSummary + fundamentalsTimeSeries), vs. the 1 call
-// yahoo-finance.provider.ts (v2) now makes. Not a throttling improvement by
-// itself - this exists for library maintenance/reliability, not to reduce
-// request volume.
+// Cash flow data is not available via quoteSummary in v4 - Yahoo moved it to
+// fundamentalsTimeSeries - so a full fetch is two Yahoo requests.
 import YahooFinance from 'yahoo-finance2-v4';
-import { StockDataProvider } from './stock-data-provider.interface';
+import { StockDataProvider, StockData } from './stock-data-provider.interface';
 import { RawQuote, RawFinancials } from '../types/domain';
 import { SymbolNotFoundError } from '../errors/symbol-not-found.error';
 import { logger } from '../logger';
 
 const SCOPE = 'YahooFinanceProvider(v4)';
 
-// See yahoo-finance.provider.ts for how these values were originally
-// derived (empirically, against v2's `fullExchangeName`). v4's `price`
-// module has no `fullExchangeName` field at all (confirmed from its .d.ts) -
-// only `exchange` and `exchangeName` - so the fallback chain below drops it.
+// Derived empirically against the exchange names Yahoo returns. An exchange
+// missing from this map yields an undefined country and a recorded error,
+// which is how gaps here become visible.
 const EXCHANGE_COUNTRY_MAP: Record<string, string> = {
   NasdaqGS: 'US', NASDAQ: 'US', NYSE: 'US', Toronto: 'CA', TSX: 'CA',
   NSE: 'IN', BSE: 'IN', LSE: 'GB', XETRA: 'DE'
@@ -54,122 +42,106 @@ const QUOTE_SUMMARY_MODULES = [
   'summaryDetail'
 ] as const;
 
-const SUMMARY_REUSE_WINDOW_MS = 10_000;
-
-// How far back to request annual free-cash-flow history. RawFinancials
-// documents "up to 5 years" of freeCashFlowHistory.
+// RawFinancials documents "up to 5 years" of freeCashFlowHistory.
 const CASH_FLOW_HISTORY_YEARS = 5;
 
 export class YahooFinanceV4Provider implements StockDataProvider {
   private client = new YahooFinance();
-  private pendingSummaries = new Map<string, Promise<any>>();
 
-  private fetchQuoteSummary(symbol: string): Promise<any> {
-    const cached = this.pendingSummaries.get(symbol);
-    if (cached) {
-      logger.info(SCOPE, `fetchQuoteSummary(${symbol}) - reusing in-flight/recent call`, { symbol });
-      return cached;
-    }
+  async getStockData(symbol: string): Promise<StockData> {
+    logger.info(SCOPE, `getStockData(${symbol}) - calling Yahoo quoteSummary`, { symbol, modules: QUOTE_SUMMARY_MODULES });
+    const quoteSummary = await this.fetchQuoteSummary(symbol);
 
-    logger.info(SCOPE, `fetchQuoteSummary(${symbol}) - calling Yahoo quoteSummary`, { symbol, modules: QUOTE_SUMMARY_MODULES });
-    const promise = this.client.quoteSummary(symbol, { modules: QUOTE_SUMMARY_MODULES } as any);
-    this.pendingSummaries.set(symbol, promise);
-    promise.then(
-      () => logger.info(SCOPE, `fetchQuoteSummary(${symbol}) - Yahoo call succeeded`, { symbol }),
-      (err: unknown) => logger.error(SCOPE, `fetchQuoteSummary(${symbol}) - Yahoo call failed`, { symbol, error: err instanceof Error ? err.message : String(err) })
-    );
-    setTimeout(() => {
-      if (this.pendingSummaries.get(symbol) === promise) {
-        this.pendingSummaries.delete(symbol);
-      }
-    }, SUMMARY_REUSE_WINDOW_MS).unref?.();
+    logger.info(SCOPE, `getStockData(${symbol}) - calling fundamentalsTimeSeries for cash flow`, { symbol });
+    const fundamentalsTimeSeries = await this.fetchFundamentalsTimeSeries(symbol);
 
-    return promise;
+    const quote = this.toQuote(symbol, quoteSummary);
+    const financials = this.toFinancials(symbol, quoteSummary, fundamentalsTimeSeries);
+
+    logger.info(SCOPE, `getStockData(${symbol}) - resolved`, {
+      symbol, currentPrice: quote.currentPrice, currency: quote.currency,
+      exchange: quote.exchange, freeCashFlowYears: financials.freeCashFlowHistory.length
+    });
+
+    return { quote, financials, raw: { quoteSummary, fundamentalsTimeSeries } };
   }
 
-  private async getSummary(symbol: string): Promise<any> {
+  private async fetchQuoteSummary(symbol: string): Promise<any> {
     try {
-      return await this.fetchQuoteSummary(symbol);
+      return await this.client.quoteSummary(symbol, { modules: QUOTE_SUMMARY_MODULES } as any);
     } catch (err) {
       if (isNotFoundError(err)) {
-        logger.warn(SCOPE, `getSummary(${symbol}) - Yahoo reports symbol not found`, { symbol });
+        logger.warn(SCOPE, `fetchQuoteSummary(${symbol}) - Yahoo reports symbol not found`, { symbol });
         throw new SymbolNotFoundError(symbol);
       }
+      logger.error(SCOPE, `fetchQuoteSummary(${symbol}) - Yahoo call failed`, { symbol, error: err instanceof Error ? err.message : String(err) });
       throw err;
     }
   }
 
-  async getQuote(symbol: string): Promise<RawQuote> {
-    const summary = await this.getSummary(symbol);
-    const price = summary.price;
-    if (!price) {
-      logger.warn(SCOPE, `getQuote(${symbol}) - no price module in response`, { symbol });
-      throw new SymbolNotFoundError(symbol);
-    }
-
-    const exchange = price.exchangeName ?? price.exchange ?? 'Unknown';
-    const result: RawQuote = {
-      symbol: price.symbol ?? symbol,
-      companyName: price.longName ?? price.shortName ?? price.symbol ?? symbol,
-      sector: summary.summaryProfile?.sector ?? 'Unknown',
-      exchange,
-      country: EXCHANGE_COUNTRY_MAP[exchange] ?? 'Unknown',
-      currency: price.currency,
-      currentPrice: price.regularMarketPrice
-    };
-    logger.info(SCOPE, `getQuote(${symbol}) - resolved`, result as unknown as Record<string, unknown>);
-    return result;
-  }
-
-  async getFinancials(symbol: string): Promise<RawFinancials> {
-    const summary = await this.getSummary(symbol);
-    logger.info(SCOPE, `getFinancials(${symbol}) - calling fundamentalsTimeSeries for cash flow`, { symbol });
-    const freeCashFlowHistory = await this.fetchFreeCashFlowHistory(symbol);
-    logger.info(SCOPE, `getFinancials(${symbol}) - resolved`, { symbol, freeCashFlowYears: freeCashFlowHistory.length, sharesOutstanding: summary.defaultKeyStatistics?.sharesOutstanding });
-
-    return {
-      symbol,
-      freeCashFlowHistory,
-      sharesOutstanding: summary.defaultKeyStatistics?.sharesOutstanding,
-      bookValuePerShare: summary.defaultKeyStatistics?.bookValue,
-      earningsPerShare: summary.defaultKeyStatistics?.trailingEps,
-      earningsGrowthRate: summary.financialData?.earningsGrowth
-        ? summary.financialData.earningsGrowth * 100
-        : undefined,
-      currentRatio: summary.financialData?.currentRatio,
-      quickRatio: summary.financialData?.quickRatio,
-      lastDividendDate: summary.summaryDetail?.exDividendDate
-        ? new Date(summary.summaryDetail.exDividendDate)
-        : undefined,
-      lastDividendAmount: summary.summaryDetail?.dividendRate,
-      dividendsPaidTTM: summary.summaryDetail?.dividendRate && summary.defaultKeyStatistics?.sharesOutstanding
-        ? summary.summaryDetail.dividendRate * summary.defaultKeyStatistics.sharesOutstanding
-        : undefined,
-      netIncomeTTM: summary.financialData?.netIncomeToCommon,
-      priceToBookIndustryAvg: undefined,
-      currentRatioIndustryAvg: undefined,
-      quickRatioIndustryAvg: undefined
-    };
-  }
-
   // fundamentalsTimeSeries returns one entry per period with a `date` and
-  // `freeCashFlow` (module: 'cash-flow', type: 'annual') - order across
-  // periods is not documented, so this sorts by date ascending itself
-  // rather than assuming an order, unlike the v2 provider's cashflowStatementHistory
-  // mapping (which relies on an empirically-confirmed newest-first order).
-  private async fetchFreeCashFlowHistory(symbol: string): Promise<number[]> {
+  // `freeCashFlow`. Order across periods is not documented, so the mapping
+  // sorts by date rather than assuming one.
+  private async fetchFundamentalsTimeSeries(symbol: string): Promise<any[]> {
     const period1 = new Date();
     period1.setFullYear(period1.getFullYear() - CASH_FLOW_HISTORY_YEARS);
 
-    const results: any[] = await (this.client as any).fundamentalsTimeSeries(symbol, {
+    return await (this.client as any).fundamentalsTimeSeries(symbol, {
       period1,
       type: 'annual',
       module: 'cash-flow'
     });
+  }
 
-    return [...(results ?? [])]
-      .filter(r => typeof r.freeCashFlow === 'number')
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-      .map(r => r.freeCashFlow);
+  private toQuote(symbol: string, summary: any): RawQuote {
+    const price = summary?.price;
+    if (!price) {
+      logger.warn(SCOPE, `toQuote(${symbol}) - no price module in response`, { symbol });
+      throw new SymbolNotFoundError(symbol);
+    }
+
+    const exchange = price.exchangeName ?? price.exchange;
+    return {
+      symbol: price.symbol ?? symbol,
+      companyName: price.longName ?? price.shortName,
+      sector: summary.summaryProfile?.sector,
+      exchange,
+      country: exchange ? EXCHANGE_COUNTRY_MAP[exchange] : undefined,
+      currency: price.currency,
+      currentPrice: price.regularMarketPrice
+    };
+  }
+
+  private toFinancials(symbol: string, summary: any, timeSeries: any[]): RawFinancials {
+    const stats = summary.defaultKeyStatistics;
+    const financialData = summary.financialData;
+    const summaryDetail = summary.summaryDetail;
+
+    return {
+      symbol,
+      freeCashFlowHistory: [...(timeSeries ?? [])]
+        .filter(r => typeof r.freeCashFlow === 'number')
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        .map(r => r.freeCashFlow),
+      sharesOutstanding: stats?.sharesOutstanding,
+      bookValuePerShare: stats?.bookValue,
+      earningsPerShare: stats?.trailingEps,
+      earningsGrowthRate: financialData?.earningsGrowth
+        ? financialData.earningsGrowth * 100
+        : undefined,
+      currentRatio: financialData?.currentRatio,
+      quickRatio: financialData?.quickRatio,
+      lastDividendDate: summaryDetail?.exDividendDate
+        ? new Date(summaryDetail.exDividendDate)
+        : undefined,
+      lastDividendAmount: summaryDetail?.dividendRate,
+      dividendsPaidTTM: summaryDetail?.dividendRate && stats?.sharesOutstanding
+        ? summaryDetail.dividendRate * stats.sharesOutstanding
+        : undefined,
+      netIncomeTTM: financialData?.netIncomeToCommon,
+      priceToBookIndustryAvg: undefined,
+      currentRatioIndustryAvg: undefined,
+      quickRatioIndustryAvg: undefined
+    };
   }
 }

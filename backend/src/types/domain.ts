@@ -1,9 +1,12 @@
 export interface RawQuote {
   symbol: string;
-  companyName: string;
-  sector: string;
-  exchange: string;
-  country: string;
+  // Metadata the provider may not supply for every symbol. Left undefined
+  // rather than defaulted here, so datapoint-calculators.ts is the single
+  // place that decides the fallback value and the error message.
+  companyName?: string;
+  sector?: string;
+  exchange?: string;
+  country?: string;
   currency: string;
   currentPrice: number;
 }
@@ -42,12 +45,4 @@ export interface FairValueAssumptions {
 export interface FairValueResult {
   fairValue: number; // native currency, per share
   assumptions: FairValueAssumptions;
-}
-
-export interface RatioResult {
-  priceToBook: number;
-  pegRatio?: number;
-  currentRatio: number;
-  quickRatio: number;
-  payoutRatio?: number;
 }

@@ -1,4 +1,12 @@
-import { RawQuote, RawFinancials, RatioResult } from '../types/domain';
+import { RawQuote, RawFinancials } from '../types/domain';
+
+interface RatioResult {
+  priceToBook: number;
+  pegRatio?: number;
+  currentRatio: number;
+  quickRatio: number;
+  payoutRatio?: number;
+}
 
 export class RatioService {
   static compute(quote: RawQuote, financials: RawFinancials): RatioResult {

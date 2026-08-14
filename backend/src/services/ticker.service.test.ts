@@ -10,21 +10,24 @@ import { TickerHistoryModel } from '../models/ticker-history.model';
 let mongod: MongoMemoryServer;
 
 const fakeProvider: StockDataProvider = {
-  getQuote: async (symbol: string) => ({
-    symbol, companyName: `${symbol} Inc.`, sector: 'Technology',
-    exchange: 'NASDAQ', country: 'US', currency: 'USD', currentPrice: 100
-  }),
-  getFinancials: async (symbol: string) => ({
-    symbol,
-    freeCashFlowHistory: [10, 11, 12],
-    sharesOutstanding: 100,
-    bookValuePerShare: 50,
-    earningsPerShare: 5,
-    earningsGrowthRate: 10,
-    currentRatio: 2,
-    quickRatio: 1.6,
-    dividendsPaidTTM: 20,
-    netIncomeTTM: 100
+  getStockData: async (symbol: string) => ({
+    quote: {
+      symbol, companyName: `${symbol} Inc.`, sector: 'Technology',
+      exchange: 'NASDAQ', country: 'US', currency: 'USD', currentPrice: 100
+    },
+    financials: {
+      symbol,
+      freeCashFlowHistory: [10, 11, 12],
+      sharesOutstanding: 100,
+      bookValuePerShare: 50,
+      earningsPerShare: 5,
+      earningsGrowthRate: 10,
+      currentRatio: 2,
+      quickRatio: 1.6,
+      dividendsPaidTTM: 20,
+      netIncomeTTM: 100
+    },
+    raw: { quoteSummary: { stub: true }, fundamentalsTimeSeries: [] }
   })
 };
 
@@ -82,11 +85,10 @@ test('addTicker normalizes symbol casing so "aapl" then "AAPL" results in one do
 
 test('addTicker stores the canonical symbol Yahoo echoes back, not the raw route param', async () => {
   const echoingProvider: StockDataProvider = {
-    ...fakeProvider,
-    getQuote: async (symbol: string) => ({
-      symbol: symbol.toUpperCase(), companyName: `${symbol} Inc.`, sector: 'Technology',
-      exchange: 'NASDAQ', country: 'US', currency: 'USD', currentPrice: 100
-    })
+    getStockData: async (symbol: string) => {
+      const base = await fakeProvider.getStockData(symbol);
+      return { ...base, quote: { ...base.quote, symbol: symbol.toUpperCase() } };
+    }
   };
   const service = new TickerService(echoingProvider, fakeCalculator, fakeConverter);
   const ticker = await service.addTicker('  aapl  ', 'portfolio');

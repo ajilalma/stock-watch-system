@@ -21,13 +21,9 @@ export class TickerService {
     symbol: string; companyName: string; sector: string; exchange: string; country: string; nativeCurrency: string;
     cachedData: CachedData;
   }> {
-    logger.info(SCOPE, `fetchCachedData(${symbol}) - calling provider.getQuote`, { symbol });
-    const quote = await this.provider.getQuote(symbol);
-    logger.info(SCOPE, `fetchCachedData(${symbol}) - got quote`, { symbol, currentPrice: quote.currentPrice, currency: quote.currency, exchange: quote.exchange });
-
-    logger.info(SCOPE, `fetchCachedData(${symbol}) - calling provider.getFinancials`, { symbol });
-    const financials = await this.provider.getFinancials(symbol);
-    logger.info(SCOPE, `fetchCachedData(${symbol}) - got financials`, { symbol, fcfYears: financials.freeCashFlowHistory.length });
+    logger.info(SCOPE, `fetchCachedData(${symbol}) - calling provider.getStockData`, { symbol });
+    const { quote, financials } = await this.provider.getStockData(symbol);
+    logger.info(SCOPE, `fetchCachedData(${symbol}) - got stock data`, { symbol, currentPrice: quote.currentPrice, currency: quote.currency, fcfYears: financials.freeCashFlowHistory.length });
 
     // A DCF failure (e.g. insufficient or all-negative-prior-year free cash
     // flow history - common for newly-listed, loss-making, or unusual
@@ -73,10 +69,10 @@ export class TickerService {
 
     return {
       symbol: quote.symbol,
-      companyName: quote.companyName,
-      sector: quote.sector,
-      exchange: quote.exchange,
-      country: quote.country,
+      companyName: quote.companyName ?? 'Unavailable',
+      sector: quote.sector ?? 'Unavailable',
+      exchange: quote.exchange ?? 'Unavailable',
+      country: quote.country ?? 'Unavailable',
       nativeCurrency: quote.currency,
       cachedData
     };
