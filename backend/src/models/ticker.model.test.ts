@@ -47,3 +47,35 @@ test('rejects a lists value outside portfolio/watchlist', async () => {
     })
   ).rejects.toThrow();
 });
+
+test('stores an errors map keyed by datapoint field name', async () => {
+  await TickerModel.create({
+    symbol: 'BROKEN',
+    companyName: 'Broken Co',
+    sector: 'Technology',
+    exchange: 'NASDAQ',
+    country: 'US',
+    nativeCurrency: 'USD',
+    lists: ['watchlist'],
+    errors: { fairValue: 'No historic data available' }
+  });
+
+  const found = await TickerModel.findOne({ symbol: 'BROKEN' });
+  expect(found?.errors?.get('fairValue')).toBe('No historic data available');
+});
+
+test('serializes the errors map to a plain object in JSON', async () => {
+  await TickerModel.create({
+    symbol: 'BROKEN2',
+    companyName: 'Broken Co 2',
+    sector: 'Technology',
+    exchange: 'NASDAQ',
+    country: 'US',
+    nativeCurrency: 'USD',
+    lists: ['watchlist'],
+    errors: { fairValue: 'No historic data available' }
+  });
+
+  const found = await TickerModel.findOne({ symbol: 'BROKEN2' });
+  expect(JSON.parse(JSON.stringify(found)).errors).toEqual({ fairValue: 'No historic data available' });
+});
