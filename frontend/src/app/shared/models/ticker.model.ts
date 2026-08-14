@@ -15,9 +15,6 @@ export interface CachedData {
   lastDividendDate?: string;
   lastDividendAmount?: number;
   payoutRatio?: number;
-  // Set when the backend's DCF calculation failed and fairValue/
-  // nativeFairValue fell back to 0 - check the DB/backend logs for details.
-  fairValueError?: string;
 }
 
 export interface Ticker {
@@ -30,4 +27,9 @@ export interface Ticker {
   nativeCurrency: string;
   lists: ('portfolio' | 'watchlist')[];
   cachedData?: CachedData;
+  // Per-datapoint failure reasons keyed by cachedData field name (e.g.
+  // datapointErrors['fairValue']). A datapoint with an entry here fell back to a
+  // default value - 0 for numbers, 'Unavailable' for strings - so the value
+  // shown is not real and should be presented as missing.
+  datapointErrors?: Record<string, string>;
 }
